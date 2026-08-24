@@ -1,8 +1,8 @@
 # Compiler
-CC = mpiicpc -mkl -O2 -xCORE-AVX512
+CC = mpiicpc -mkl -O2
 
 # Flags
-CFLAGS = -std=c++17 -I $(EIGEN3_INCLUDE_DIR) -w
+CFLAGS = -std=c++17 -I $(EIGEN3_INCLUDE_DIR) -DPFQMC_SCALE_SAFE_UDT -w
 LFLAGS = ./inc/pfapack/c_interface/libcpfapack.a  ./inc/pfapack/fortran/libpfapack.a
 
 # Source directories
@@ -33,4 +33,3 @@ $(OBJ_DIR)/main.o:
 
 clean:
 		rm -f $(OBJS) $(OBJ_DIR)/main.o $(BDIR)/main
-

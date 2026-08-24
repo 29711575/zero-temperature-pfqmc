@@ -201,8 +201,13 @@ public:
         MatType lhs = product.T.inverse();
         dVecType dplus(nDim), dminus(nDim);
         for (int i=0;i<nDim;++i) {
+#ifdef PFQMC_SCALE_SAFE_UDT
+            dplus(i) = product.dLargeInverse(i);
+            dminus(i) = product.dSmallPart(i);
+#else
             dplus(i) = 1.0 / std::max(product.D(i), 1.0);
             dminus(i) = std::min(product.D(i), 1.0);
+#endif
         }
         MatType core = lhs * dplus.asDiagonal() + product.U * dminus.asDiagonal();
         Eigen::JacobiSVD<MatType> svd(core);

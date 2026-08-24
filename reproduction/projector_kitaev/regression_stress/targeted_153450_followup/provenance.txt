@@ -1,0 +1,14 @@
+2026-08-24T10:01:18+0800
+source_tree=/home/sunxr/PfQMC-main
+old_campaign_job=153450.mgt
+tasks=60
+matched_seeds_per_point=6
+compile_macro=PFQMC_SCALE_SAFE_UDT
+7adde50c1a60ca5584a0ca724af83e0334cdf2450089e02e59e315f81fad791f  /home/sunxr/PfQMC-main/inc/qr_udt.h
+2b401288244bb43a175d93bcdea3ae11006106656120a18f67e5cc418123c079  /home/sunxr/PfQMC-main/inc/pfqmc.h
+5fb99d84438ebab7103e281283a9e07e1112ec9476634110e28e82d93e705d0f  /home/sunxr/PfQMC-main/src/pfqmc.cpp
+823b6bd77a12899907cf15af9f4a10799add03e40ccde74ec8b1681ced3f0946  /home/sunxr/PfQMC-main/src/skewMatUtils.cpp
+7e3835e940a57f2525c3f148446de73f695550b5b13901ddb6cb3a803f44448f  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/regression_stress/scripts/regression_driver.cpp
+99e062fe762f6a121f978498559478986eb1c41cc2cc36927683f544b9172443  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/regression_stress/bin/regression_driver_scale_safe
+a2c8753435f1539b095512625df3e9139c126e619e78d42131b5e13c1eaae84f  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/regression_stress/targeted_153450_followup/manifest.csv
+86cc865b8917a8df417861dbef6d8afa0f477dd3e18580fc68d58243376b8ba7  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/regression_stress/targeted_153450_followup/targeted_followup.pbs
