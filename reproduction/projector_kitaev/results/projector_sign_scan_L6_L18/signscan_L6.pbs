@@ -1,0 +1,25 @@
+#!/bin/bash
+#PBS -N signscan_L6
+#PBS -q workq
+#PBS -J 0-41
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+base="$root/results/projector_sign_scan_L6_L18"
+manifest="$base/manifest_L6.csv"
+i=${PBS_ARRAY_INDEX:?}
+row=$(awk -F, -v i="$i" 'NR==i+2{print;exit}' "$manifest" | tr -d '\r')
+IFS=, read -r task_id campaign L V theta beta_trial dt delta mu boundary hs_scheme seed burn measurements threads adaptive_guard diagnostic_stride stabilization_interval sign_recompute_stride output_dir reuse_result <<< "$row"
+[[ "$task_id" == "$i" && "$adaptive_guard" == false && "$L" == 6 && "$boundary" == 0 && "$hs_scheme" == 0 && "$stabilization_interval" == 10 && "$sign_recompute_stride" == 20 ]] || exit 2
+out="$base/$output_dir"; log="$base/logs/L6/task_${task_id}.stderr.log"; mkdir -p "$out" "$(dirname "$log")"
+if [[ -n "$reuse_result" ]]; then printf 'status=reused\nsource=%s\n' "$reuse_result" > "$out/status.txt"; exit 0; fi
+[[ ! -e "$out/result.json" ]] || { echo "existing output retained" >&2; exit 0; }
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+set +e
+"$root/validation/projector_bins_driver" "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" "$burn" "$measurements" "$threads" "$out/measurements.csv" "$diagnostic_stride" > "$out/result.json.tmp" 2> "$log"
+rc=$?
+set -e
+if [[ $rc -eq 0 ]]; then mv "$out/result.json.tmp" "$out/result.json"; printf 'status=complete\njob_id=%s\n' "${PBS_JOBID:-unknown}" > "$out/status.txt"; else rm -f "$out/result.json.tmp"; printf 'status=failed\nexit_code=%s\n' "$rc" > "$out/status.txt"; exit "$rc"; fi

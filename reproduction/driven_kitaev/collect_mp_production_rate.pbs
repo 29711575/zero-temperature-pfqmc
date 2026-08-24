@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#PBS -N collect_mp_rate
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+set -euo pipefail
+cd "${PBS_O_WORKDIR:?}"
+python3 collect_mp_production_rate.py > results/mp_production_rate/collector.json

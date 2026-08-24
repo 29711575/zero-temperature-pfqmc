@@ -1,0 +1,19 @@
+#!/bin/bash
+#PBS -N production_trot
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -J 0-11
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+manifest="$root/results/production_trotter_theta10/manifest.csv"
+row=$(awk -F, -v i="${PBS_ARRAY_INDEX:?}" 'NR==i+2{print;exit}' "$manifest" | tr -d '\r')
+IFS=, read -r task_id campaign L V theta beta_trial dt delta mu boundary hs_scheme seed burn measurements threads adaptive_guard guard_threshold multiprecision_fallback full_rebuild_diagnostic diagnostic_stride stabilization_interval sign_recompute_stride output_dir code_version <<< "$row"
+[[ "$task_id" == "$PBS_ARRAY_INDEX" && "$adaptive_guard" == false && "$stabilization_interval" == 10 && "$sign_recompute_stride" == 20 ]] || { echo "manifest invariant failure" >&2; exit 2; }
+out="$root/$output_dir"; mkdir -p "$out"; [[ ! -e "$out/result.json" ]] || { echo "refusing overwrite" >&2; exit 3; }
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+"$root/validation/projector_bins_driver" "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" "$burn" "$measurements" "$threads" "$out/measurements.csv" 0 > "$out/result.json" 2> "$out/stderr.log"
+printf '%s\n' "$row" > "$out/manifest_row.csv"
+printf 'status=complete\njob_id=%s\n' "${PBS_JOBID:-unknown}" > "$out/status.txt"

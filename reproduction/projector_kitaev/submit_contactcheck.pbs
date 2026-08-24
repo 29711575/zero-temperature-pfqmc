@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#PBS -N pfqmc_contactcheck
+#PBS -q workq
+#PBS -J 0-5
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail
+cd "${PBS_O_WORKDIR:?submit qsub from reproduction/projector_kitaev}"
+task_id=${PBS_ARRAY_INDEX:?PBS_ARRAY_INDEX unavailable}
+row=$(sed -n "$((task_id+2))p" manifest_contactcheck.csv | tr -d '\r')
+IFS=, read -r manifest_id campaign L V theta beta_trial dt delta mu boundary hs_scheme seed burn measurements threads output_dir <<< "$row"
+[[ "$manifest_id" == "$task_id" && -x ./projector_driver ]] || exit 2
+mkdir -p "$output_dir"
+[[ ! -e "$output_dir/result.json" ]] || { echo "existing output retained" >&2; exit 2; }
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+started=$(date +%s); set +e
+./projector_driver "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" "$burn" "$measurements" "$threads" >"$output_dir/result.json" 2>"$output_dir/stderr.log"
+rc=$?; set -e; ended=$(date +%s)
+printf 'status=%s\nexit_code=%s\njob_id=%s\ncampaign=%s\nwrapper_seconds=%s\n' "$([[ $rc -eq 0 ]] && echo complete || echo failed)" "$rc" "${PBS_JOBID:-unknown}" "$campaign" "$((ended-started))" >"$output_dir/status.txt"
+exit "$rc"

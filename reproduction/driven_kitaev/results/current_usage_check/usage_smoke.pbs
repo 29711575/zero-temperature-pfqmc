@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N driven_usage
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+set -euo pipefail
+cd /home/sunxr/PfQMC-main
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+o=reproduction/driven_kitaev/results/current_usage_check/pbs
+mkdir -p "$o"
+export PFQMC_BIN_RECORDS_PATH="$PWD/$o/bin_records.csv"
+/tmp/driven_usage_check 4 0 4 2 1 1 .1 1 0 0 10 20 88004 >"$o/result.json" 2>"$o/stderr.log"

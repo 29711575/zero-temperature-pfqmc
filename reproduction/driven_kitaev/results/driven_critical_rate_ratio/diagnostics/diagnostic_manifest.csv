@@ -1,0 +1,7 @@
+diag_id,original_task_id,L,Vf,rate,seed,burn,measurements,label
+0,38,26,3.80,0.5,4226003,500,5000,earliest_compatible_failure
+1,443,34,3.80,0.5,4234012,500,5000,largest_compatible_excess
+2,46,26,3.80,0.5,4226011,500,5000,large_sign_imag_L26
+3,187,26,4.00,0.5,4226008,500,5000,representative_V4_L26
+4,324,26,4.20,0.5,4226001,500,5000,sign_and_green_trigger
+5,577,34,4.00,0.5,4234002,500,5000,representative_V4_L34

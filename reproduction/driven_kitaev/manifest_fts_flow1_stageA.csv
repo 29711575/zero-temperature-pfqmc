@@ -1,0 +1,10 @@
+task_id,Vf,drive_rate,seed,burn,measurements,output_dir
+0,3.6,2,960001,100,500,results/fts_flow1_pilot/stageA/task_000_vf36_r2_s960001
+1,3.6,1,960002,100,500,results/fts_flow1_pilot/stageA/task_001_vf36_r1_s960002
+2,3.6,0.5,960003,100,500,results/fts_flow1_pilot/stageA/task_002_vf36_r05_s960003
+3,4.0,2,960004,100,500,results/fts_flow1_pilot/stageA/task_003_vf40_r2_s960004
+4,4.0,1,960005,100,500,results/fts_flow1_pilot/stageA/task_004_vf40_r1_s960005
+5,4.0,0.5,960006,100,500,results/fts_flow1_pilot/stageA/task_005_vf40_r05_s960006
+6,4.4,2,960007,100,500,results/fts_flow1_pilot/stageA/task_006_vf44_r2_s960007
+7,4.4,1,960008,100,500,results/fts_flow1_pilot/stageA/task_007_vf44_r1_s960008
+8,4.4,0.5,960009,100,500,results/fts_flow1_pilot/stageA/task_008_vf44_r05_s960009

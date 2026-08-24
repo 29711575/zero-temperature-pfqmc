@@ -1,0 +1,7 @@
+submitted_at=2026-08-21T22:41:09+0800
+production_trotter_job=153356[].mgt
+static_projector_qmc_job=153357[].mgt
+static_projector_ed_job=153358.mgt
+new_qmc_tasks=24
+new_ed_tasks=1
+e5d2927bb9c6b80b52227daf459182aa2757e0cf580dfe9813babeda92e7ebf2  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/validation/static_projector_ed_pbc.py

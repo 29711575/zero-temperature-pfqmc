@@ -1,0 +1,13 @@
+task_id,campaign,L,V,theta,beta_trial,dt,delta,mu,boundary,hs_scheme,seed,burn,measurements,threads,adaptive_guard,guard_threshold,multiprecision_fallback,full_rebuild_diagnostic,diagnostic_stride,stabilization_interval,sign_recompute_stride,output_dir,code_version
+0,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990301,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_000_s990301,source_identifier:PfQMC-main_20260821
+1,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990302,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_001_s990302,source_identifier:PfQMC-main_20260821
+2,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990303,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_002_s990303,source_identifier:PfQMC-main_20260821
+3,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990304,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_003_s990304,source_identifier:PfQMC-main_20260821
+4,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990305,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_004_s990305,source_identifier:PfQMC-main_20260821
+5,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990306,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_005_s990306,source_identifier:PfQMC-main_20260821
+6,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990307,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_006_s990307,source_identifier:PfQMC-main_20260821
+7,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990308,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_007_s990308,source_identifier:PfQMC-main_20260821
+8,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990309,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_008_s990309,source_identifier:PfQMC-main_20260821
+9,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990310,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_009_s990310,source_identifier:PfQMC-main_20260821
+10,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990311,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_010_s990311,source_identifier:PfQMC-main_20260821
+11,static_projector_ed_final,6,2.0,10,8,0.1,1,0,0,0,990312,500,5000,1,false,,false,false,0,10,20,results/static_projector_ed_final/raw/task_011_s990312,source_identifier:PfQMC-main_20260821

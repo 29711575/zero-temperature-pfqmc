@@ -1,0 +1,18 @@
+#!/bin/bash
+#PBS -N paper_diag
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -J 0-5
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/driven_kitaev/results/paper_supplement
+row=$(awk -F, -v i="${PBS_ARRAY_INDEX:?}" 'NR==i+2{print;exit}' "$root/campaign_diagnostic_manifest.csv" | tr -d '\r')
+IFS=, read -r task_id origin seed L V theta beta_trial dt delta mu boundary hs_scheme burn measurements threads adaptive_guard multiprecision_fallback stabilization_interval sign_recompute_stride <<< "$row"
+[[ "$task_id" == "$PBS_ARRAY_INDEX" && "$adaptive_guard" == false && "$multiprecision_fallback" == false ]] || exit 2
+out="$root/cross_campaign_reproduction/task_${task_id}_${origin}_s${seed}"
+mkdir -p "$out"; [[ ! -e "$out/result.json" ]] || exit 3
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+/home/sunxr/PfQMC-main/reproduction/driven_kitaev/results/paper_supplement/bin/projector_bins_driver_cxx14 "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" "$burn" "$measurements" "$threads" "$out/measurements.csv" 0 > "$out/result.json" 2> "$out/stderr.log"
+sha256sum "$out/result.json" "$out/measurements.csv" > "$out/sha256.txt"
+printf '%s\n' "$row" > "$out/manifest_row.csv"

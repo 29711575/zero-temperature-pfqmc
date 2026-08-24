@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#PBS -N pfqmc_equil
+#PBS -q workq
+#PBS -J 0-35
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+set -euo pipefail
+export LANG=C
+export LC_ALL=C
+cd "${PBS_O_WORKDIR:?submit from reproduction/driven_kitaev}"
+i=${PBS_ARRAY_INDEX:?}
+row=$(sed -n "$((i+2))p" manifest_equilibration.csv | tr -d '\r')
+IFS=, read -r id label vf dt burn seed out <<< "$row"
+[[ "$id" == "$i" ]] || exit 2
+mkdir -p "$out"
+[[ ! -e "$out/result.json" ]] || exit 2
+set +u
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+set -u
+export PFQMC_BIN_RECORDS_PATH="$out/bin_records.csv"
+export PFQMC_CODE_VERSION="$(git rev-parse --verify HEAD 2>/dev/null || printf source-tree-no-git)"
+start=$(date +%s)
+set +e
+./driven_driver 6 0 "$vf" 1 6 8 "$dt" 1 0 1 "$burn" 3000 "$seed" "$out/timeseries.csv" 1 >"$out/result.json" 2>"$out/stderr.log"
+rc=$?
+set -e
+printf 'status=%s\nexit_code=%s\njob_id=%s\nwrapper_seconds=%s\n' "$([[ $rc -eq 0 ]] && echo complete || echo failed)" "$rc" "${PBS_JOBID:-unknown}" "$(( $(date +%s)-start ))" >"$out/status.txt"
+exit "$rc"

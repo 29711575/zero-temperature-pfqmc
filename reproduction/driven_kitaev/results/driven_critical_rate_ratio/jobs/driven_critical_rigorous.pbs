@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#PBS -N drv_crit_rig
+#PBS -q workq
+#PBS -J 0-791
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=120:00:00
+#PBS -j oe
+set -euo pipefail
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+root=/home/sunxr/PfQMC-main
+base="$root/reproduction/driven_kitaev/results/driven_critical_rate_ratio"
+manifest="$base/manifests/rigorous_manifest.csv"
+i=${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}
+row=$(sed -n "$((i+2))p" "$manifest" | tr -d '\r')
+IFS=, read -r id campaign L Vf rate seed burn measurements outrel <<< "$row"
+[[ "$id" == "$i" ]] || exit 2
+out="$base/$outrel"; mkdir -p "$out"
+if [[ -s "$out/result.json" ]]; then exit 0; fi
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export PFQMC_BIN_RECORDS_PATH="$out/bin_records.csv" PFQMC_N_BINS=15
+export PFQMC_CODE_VERSION=driven-critical-rate-ratio-20260823 PFQMC_MULTIPRECISION_FALLBACK=OFF
+set +e
+"$base/bin/driven_driver" "$L" 0 "$Vf" "$rate" 6 8 0.1 1 0 1 "$burn" "$measurements" "$seed" 0 0.8 >"$out/result.json.tmp" 2>"$out/stderr.log"
+rc=$?; set -e
+if [[ $rc -eq 0 ]]; then mv "$out/result.json.tmp" "$out/result.json"; status=complete; else status=failed; fi
+printf 'status=%s\nexit_code=%s\njob_id=%s\narray_index=%s\n' "$status" "$rc" "${PBS_JOBID:-unknown}" "$i" >"$out/status.txt"
+exit "$rc"

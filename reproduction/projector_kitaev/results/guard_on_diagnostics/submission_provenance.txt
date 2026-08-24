@@ -1,0 +1,8 @@
+submitted_at=2026-08-21T19:35:26+0800
+code_version=source_identifier:PfQMC-main_20260821
+source_hashes:
+5fb99d84438ebab7103e281283a9e07e1112ec9476634110e28e82d93e705d0f  /home/sunxr/PfQMC-main/src/pfqmc.cpp
+8ce554d650fb75f283ce9aeab5e81c66a3bedd9dac74215661cefd2a69168eb2  /home/sunxr/PfQMC-main/inc/pfqmc.h
+aa3a2390e4592645dfb9033c35f4d2dc4aa666367d544c795491e96bfbc5098e  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/projector_driver.cpp
+ed15824b6e3f8cc379e7d91b161ee45257a51fedf0c66c165b1d2d28248d2ce7  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/validation/static_guard_driver.cpp
+job_id=153352[].mgt

@@ -1,0 +1,24 @@
+#!/bin/bash
+#PBS -N L18_sign_audit
+#PBS -q workq
+#PBS -J 0-6
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=120:00:00
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+base="$root/results/projector_sign_scan_L6_L18"
+audit="$base/L18_warning_audit"
+row=$(awk -F, -v i="${PBS_ARRAY_INDEX:?}" 'NR==i+2{print;exit}' "$base/L18_warning_audit_manifest.csv" | tr -d '\r')
+IFS=, read -r audit_id L V theta beta_trial dt delta mu boundary hs_scheme seed burn measurements threads full_diag_stride direct_sign_stride reason source_task <<< "$row"
+[[ "$audit_id" == "$PBS_ARRAY_INDEX" && "$L" == 18 && "$boundary" == 0 && "$hs_scheme" == 0 && "$direct_sign_stride" == 1 ]] || exit 2
+out="$audit/raw/audit_${audit_id}_V${V}_s${seed}"; log="$audit/logs/audit_${audit_id}.stderr.log"
+mkdir -p "$out" "$(dirname "$log")"
+[[ ! -e "$out/result.json" ]] || { echo 'existing output retained' >&2; exit 0; }
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+set +e
+"$root/validation/sign_warning_audit_driver" "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" "$burn" "$measurements" "$threads" "$out/measurements.csv" "$full_diag_stride" "$direct_sign_stride" > "$out/result.json.tmp" 2> "$log"
+rc=$?
+set -e
+if [[ $rc -eq 0 ]]; then mv "$out/result.json.tmp" "$out/result.json"; printf 'status=complete\njob_id=%s\nreason=%s\nsource_task=%s\n' "${PBS_JOBID:-unknown}" "$reason" "$source_task" > "$out/status.txt"; else rm -f "$out/result.json.tmp"; printf 'status=failed\nexit_code=%s\n' "$rc" > "$out/status.txt"; exit "$rc"; fi

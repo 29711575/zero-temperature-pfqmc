@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#PBS -N pfqmc_mp_rate
+#PBS -q workq
+#PBS -J 0-19
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+cd "${PBS_O_WORKDIR:?}"
+root=/home/sunxr/PfQMC-main
+base="$root/reproduction/driven_kitaev/results/mp_production_rate"
+bin="$base/bin/driven_driver_mp_rate"
+set +u
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+set -u
+task_index=${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}
+if [[ -z "$task_index" && "${PBS_JOBID:-}" =~ \[([0-9]+)\] ]]; then task_index=${BASH_REMATCH[1]}; fi
+: "${task_index:?missing PBS array index}"
+readonly task_index
+row=$(sed -n "$((task_index+2))p" manifest_mp_production_rate.csv | tr -d '\r')
+IFS=, read -r id mode L rate seed <<< "$row"
+[[ "$id" == "$task_index" ]]
+out="$base/runs/task_${id}_${mode}_L${L}_R${rate}_s${seed}"
+mkdir -p "$out"
+if [[ "$mode" == ON ]]; then export PFQMC_MULTIPRECISION_FALLBACK=ON; else export PFQMC_MULTIPRECISION_FALLBACK=OFF; fi
+export PFQMC_MULTIPRECISION_RECORD_PROXY=ON
+export PFQMC_MULTIPRECISION_CORE_THRESHOLD=1e4
+"$bin" "$L" 0 4 "$rate" 6 8 0.1 1 0 1 300 500 "$seed" 1 0.1 > "$out/result.json" 2> "$out/stderr.log"
+printf 'status=complete\nexit_code=0\njob_id=%s\narray_index=%s\nmode=%s\n' "${PBS_JOBID:-unknown}" "$task_index" "$mode" > "$out/status.txt"

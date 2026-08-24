@@ -1,0 +1,10 @@
+campaign,completed,planned,missing
+tiny_enumeration,56,56,0
+tiny_ed,56,56,0
+gaussian_exact,60,60,0
+gaussian_qmc,60,60,0
+hs_crosscheck,288,288,0
+delta_symmetry,48,48,0
+delta_ed,8,8,0
+stability,36,42,6
+known_physics,76,96,20

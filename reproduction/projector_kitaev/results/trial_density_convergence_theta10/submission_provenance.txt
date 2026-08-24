@@ -1,0 +1,7 @@
+submitted_at=2026-08-21T20:28:07+0800
+job_id=153353[].mgt
+code_version=source_identifier:PfQMC-main_20260821
+9aaa7fae87125ad43a441c4b18054ed67e0dee22727fb256fc1b9cca9922d8a8  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/validation/projector_bins_driver.cpp
+31dec217a47a9ac7344d514663fe94a3f6224028a6c6755d1dcbb8a219af9301  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/validation/projector_bins_driver
+5fb99d84438ebab7103e281283a9e07e1112ec9476634110e28e82d93e705d0f  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/../../src/pfqmc.cpp
+8ce554d650fb75f283ce9aeab5e81c66a3bedd9dac74215661cefd2a69168eb2  /home/sunxr/PfQMC-main/reproduction/projector_kitaev/../../inc/pfqmc.h

@@ -1,0 +1,7 @@
+task_id,campaign,L,V,theta,beta_trial,dt,delta,mu,boundary,hs_scheme,seed,burn,measurements,threads,output_dir
+0,contactcheck,6,2,6,8,0.1,1,0,1,0,920201,300,1500,1,results/hpc_contactcheck/runs/task_000_L6_V2_t6_bt8_s920201
+1,contactcheck,6,2,6,8,0.1,1,0,1,0,920202,300,1500,1,results/hpc_contactcheck/runs/task_001_L6_V2_t6_bt8_s920202
+2,contactcheck,6,4,6,8,0.1,1,0,1,0,920401,300,1500,1,results/hpc_contactcheck/runs/task_002_L6_V4_t6_bt8_s920401
+3,contactcheck,6,4,6,8,0.1,1,0,1,0,920402,300,1500,1,results/hpc_contactcheck/runs/task_003_L6_V4_t6_bt8_s920402
+4,contactcheck,8,4,8,4,0.1,1,0,1,0,920801,300,1500,1,results/hpc_contactcheck/runs/task_004_L8_V4_t8_bt4_s920801
+5,contactcheck,8,4,8,4,0.1,1,0,1,0,920802,300,1500,1,results/hpc_contactcheck/runs/task_005_L8_V4_t8_bt4_s920802

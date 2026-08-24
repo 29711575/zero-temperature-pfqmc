@@ -1,0 +1,17 @@
+{
+  "max_anticommutator_error": {
+    "max_abs": 0.0, 
+    "index": [
+      0, 
+      0
+    ], 
+    "imag": 0.0, 
+    "real": 0.0, 
+    "gamma_indices": [
+      0, 
+      0
+    ]
+  }, 
+  "all_pair_max_abs": 0.0, 
+  "L": 6
+}

@@ -1,0 +1,49 @@
+{
+  "S_pi_dq": 0.04632267310369277, 
+  "delta": 1.0, 
+  "interaction_groups": {
+    "even_bonds": [
+      [
+        0, 
+        1
+      ], 
+      [
+        2, 
+        3
+      ], 
+      [
+        4, 
+        5
+      ]
+    ], 
+    "odd_bonds": [
+      [
+        1, 
+        2
+      ], 
+      [
+        3, 
+        4
+      ], 
+      [
+        5, 
+        0
+      ]
+    ]
+  }, 
+  "L": 6, 
+  "symmetric_trotter": "exp(-dt K/2) exp(-dt V E) exp(-dt V O) exp(-dt K/2)", 
+  "z_scores": {
+    "S_pi_dq": -0.4390005139396431, 
+    "S_pi": 0.6813275712119203, 
+    "R_cdw": 0.6277925404487765
+  }, 
+  "V": 2.0, 
+  "dt": 0.1, 
+  "S_pi": 0.08301358174910987, 
+  "method": "static_projector_exact_PBC", 
+  "mu": 0.0, 
+  "R_cdw": 0.44198681555877484, 
+  "theta": 10.0, 
+  "beta_trial": 8.0
+}

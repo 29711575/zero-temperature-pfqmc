@@ -1,0 +1,7 @@
+{
+  "campaign": "production_trotter_theta10",
+  "task_count": 12,
+  "code_version": "source_identifier:PfQMC-main_20260821",
+  "guard_mode": false,
+  "manifest_sha256": "0447ece604c28177903006d548b5d6845f2fbcd228328dc3c108fb06b41f8cb5"
+}

@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -N rs_delta_ed
+#PBS -q workq
+#PBS -J 0-7
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=48:00:00
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+base="$root/regression_stress"; manifest="$base/manifests/delta_ed.csv"
+row=$(awk -F, -v i="${PBS_ARRAY_INDEX:?}" 'NR==i+2{print;exit}' "$manifest" | tr -d '')
+IFS=, read -r task_id campaign L V theta beta_trial dt delta mu boundary hs_scheme seed burn measurements stb guard diagnostic_stride sign_stride output_dir <<< "$row"
+out="$base/$output_dir"; mkdir -p "$out"; [[ ! -s "$out/result.json" ]] || exit 0
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+set +e; python "$base/scripts/same_contour_ed_general.py" --L "$L" --V "$V" --theta "$theta" --beta-trial "$beta_trial" --dt "$dt" --boundary "$boundary" --delta "$delta" --mu "$mu" >"$out/result.json.tmp" 2>"$out/stderr.log"; rc=$?; set -e
+if [[ $rc -eq 0 ]]; then mv "$out/result.json.tmp" "$out/result.json"; printf 'status=complete
+job_id=%s
+' "${PBS_JOBID:-unknown}" >"$out/status.txt"; else printf 'status=failed
+exit_code=%s
+' "$rc" >"$out/status.txt"; exit "$rc"; fi

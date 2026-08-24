@@ -1,0 +1,18 @@
+status=submitted
+scheduler=PBS Professional 19.1.1
+queue=workq (reused from validation_hpc_234)
+resources=nodes=1:ppn=1 per array element
+threads=OMP_NUM_THREADS=1,MKL_NUM_THREADS=1,OPENBLAS_NUM_THREADS=1
+walltime_qmc=120:00:00
+walltime_exact=48:00:00
+core_source_modified=false
+smoke=tiny enumeration agrees with generalized dense ED to machine precision; same-configuration fast/full Green relative error below 1e-15
+tiny_enumeration_job=153400[].mgt
+tiny_ed_job=153401[].mgt
+gaussian_exact_job=153402[].mgt
+gaussian_qmc_job=153403[].mgt
+hs_crosscheck_job=153404[].mgt
+delta_symmetry_job=153405[].mgt
+delta_ed_job=153406[].mgt
+stability_job=153407[].mgt
+known_physics_job=153408[].mgt

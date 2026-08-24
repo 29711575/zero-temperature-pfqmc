@@ -1,0 +1,18 @@
+# Final analysis
+
+B DONE: dt0.1=[0.045544861476719635, 0.03530602279975624, 0.22480776853821371]; dt0.05=[0.045914525161747086, 0.03522343199806708, 0.23284773448092]; difference=[0.00036966368502745067, -8.259080168915994e-05, 0.008039965942706284].
+
+C DONE: z vs ED=[-1.7688712300686156, 0.6569603448492818, -1.38345589937063].
+
+D BLOCKED: six exact-seed reproductions differ; not merged.
+
+Trial-only diagnostic: NOT RUN; production builder exposes only operator sequence, no trial-only Green accessor. Minimal required diagnostic is a read-only product/Green helper over the first trial_slices DenseOperators.
+
+## D RECOMPUTED_WITH_CURRENT_EXECUTABLE
+24 current-executable raw-bin pooled files written.
+
+## E guard-off
+beta 4 pooled [0.045303005795600586, 0.035395804117122454, 0.2186875132122078] error [0.0002274955617428684, 8.315153216128442e-05, 0.004262568400023901]
+beta 8 pooled [0.04530300579560439, 0.0353958041171277, 0.21868751321215762] error [0.0002274955617430593, 8.315153216123956e-05, 0.004262568400020835]
+beta 12 pooled [0.045303005795604395, 0.0353958041171277, 0.21868751321215774] error [0.00022749556174305724, 8.315153216123984e-05, 0.004262568400020754]
+Matched differences written to E_matched_differences.csv.

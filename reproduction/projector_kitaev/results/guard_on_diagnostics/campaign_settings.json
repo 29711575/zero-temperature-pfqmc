@@ -1,0 +1,9 @@
+{
+  "group": "guard_on_diagnostics",
+  "task_count": 11,
+  "driver_kind": "guard",
+  "pbs_walltime": "12:00:00",
+  "manifest": "/home/sunxr/PfQMC-main/reproduction/projector_kitaev/results/guard_on_diagnostics/manifest.csv",
+  "guard_mode": "true",
+  "code_version": "source_identifier:PfQMC-main_20260821"
+}

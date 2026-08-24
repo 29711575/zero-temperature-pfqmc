@@ -1,0 +1,37 @@
+#!/bin/bash
+#PBS -N trotter_convergence
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -J 0-35
+#PBS -j oe
+
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+group=trotter_convergence
+manifest="$root/results/$group/manifest.csv"
+row=$(awk -F, -v i="${PBS_ARRAY_INDEX:?}" 'NR==i+2{print;exit}' "$manifest" | tr -d '\r')
+[[ -n "$row" ]] || { echo "missing manifest row $PBS_ARRAY_INDEX" >&2; exit 2; }
+IFS=, read -r task_id campaign L V theta beta_trial dt delta mu boundary hs_scheme seed burn measurements threads adaptive_guard guard_threshold multiprecision_fallback full_rebuild_diagnostic diagnostic_stride stabilization_interval sign_recompute_stride output_dir source_result_path source_task_id code_version <<< "$row"
+[[ "$task_id" == "$PBS_ARRAY_INDEX" ]] || { echo "manifest index mismatch" >&2; exit 2; }
+[[ "$boundary" == 0 && "$delta" == 1 && "$mu" == 0 && "$hs_scheme" == 0 && "$threads" == 1 ]] || { echo "unexpected fixed parameter" >&2; exit 2; }
+[[ "$multiprecision_fallback" == false && "$stabilization_interval" == 10 && "$sign_recompute_stride" == 20 ]] || { echo "unexpected numerical setting" >&2; exit 2; }
+out="$root/$output_dir"
+mkdir -p "$out"
+[[ ! -e "$out/result.json" ]] || { echo "refusing to overwrite $out/result.json" >&2; exit 3; }
+set +u
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+set -u
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+cd "$root"
+if [[ "off" == guard ]]; then
+  [[ "$adaptive_guard" == true && "$guard_threshold" == 0.1 ]] || { echo "guard-on manifest mismatch" >&2; exit 2; }
+  [[ -x validation/static_guard_driver ]] || { echo "missing validation/static_guard_driver" >&2; exit 2; }
+  ./validation/static_guard_driver "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" "$burn" "$measurements" "$threads" "$out/measurements.csv" "$diagnostic_stride" >"$out/result.json" 2>"$out/stderr.log"
+else
+  [[ "$adaptive_guard" == false && "$diagnostic_stride" == 0 ]] || { echo "guard-off manifest mismatch" >&2; exit 2; }
+  [[ -x ./projector_driver ]] || { echo "missing projector_driver" >&2; exit 2; }
+  ./projector_driver "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" "$burn" "$measurements" "$threads" >"$out/result.json" 2>"$out/stderr.log"
+fi
+printf '%s\n' "$row" >"$out/manifest_row.csv"
+printf 'status=complete\njob_id=%s\n' "${PBS_JOBID:-unknown}" >"$out/status.txt"

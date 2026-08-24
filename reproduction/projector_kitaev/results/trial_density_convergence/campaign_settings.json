@@ -1,0 +1,9 @@
+{
+  "group": "trial_density_convergence",
+  "task_count": 72,
+  "driver_kind": "off",
+  "pbs_walltime": "24:00:00",
+  "manifest": "/home/sunxr/PfQMC-main/reproduction/projector_kitaev/results/trial_density_convergence/manifest.csv",
+  "guard_mode": "false",
+  "code_version": "source_identifier:PfQMC-main_20260821"
+}

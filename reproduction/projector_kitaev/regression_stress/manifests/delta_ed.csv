@@ -1,0 +1,9 @@
+task_id,campaign,L,V,theta,beta_trial,dt,delta,mu,boundary,hs_scheme,seed,burn,measurements,stabilization_interval,guard,diagnostic_stride,sign_stride,output_dir
+0,delta_ed,6,2,10,8,0.1,-0.6,0.7,0,0,730001,0,0,10,0,0,20,raw/delta_ed/task_0000_s730001
+1,delta_ed,6,2,10,8,0.1,0.6,0.7,0,0,730001,0,0,10,0,0,20,raw/delta_ed/task_0001_s730001
+2,delta_ed,6,4,10,8,0.1,-0.6,0.7,0,0,730007,0,0,10,0,0,20,raw/delta_ed/task_0002_s730007
+3,delta_ed,6,4,10,8,0.1,0.6,0.7,0,0,730007,0,0,10,0,0,20,raw/delta_ed/task_0003_s730007
+4,delta_ed,6,2,10,8,0.1,-0.6,0.7,1,0,730013,0,0,10,0,0,20,raw/delta_ed/task_0004_s730013
+5,delta_ed,6,2,10,8,0.1,0.6,0.7,1,0,730013,0,0,10,0,0,20,raw/delta_ed/task_0005_s730013
+6,delta_ed,6,4,10,8,0.1,-0.6,0.7,1,0,730019,0,0,10,0,0,20,raw/delta_ed/task_0006_s730019
+7,delta_ed,6,4,10,8,0.1,0.6,0.7,1,0,730019,0,0,10,0,0,20,raw/delta_ed/task_0007_s730019

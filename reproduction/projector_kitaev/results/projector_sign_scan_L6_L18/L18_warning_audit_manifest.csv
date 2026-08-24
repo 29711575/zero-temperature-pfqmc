@@ -1,0 +1,8 @@
+audit_id,L,V,theta,beta_trial,dt,delta,mu,boundary,hs_scheme,seed,burn,measurements,threads,full_diag_stride,direct_sign_stride,reason,source_task
+0,18,4.5,10,8,0.1,1,0,0,0,992801,500,5000,1,0,1,sign_correction,task_024_V4.5_s992801
+1,18,4.5,10,8,0.1,1,0,0,0,992804,500,5000,1,0,1,sign_correction,task_027_V4.5_s992804
+2,18,4.5,10,8,0.1,1,0,0,0,992806,500,5000,1,0,1,sign_correction,task_029_V4.5_s992806
+3,18,5,10,8,0.1,1,0,0,0,992801,500,5000,1,0,1,max_sign_imag_gt_1e-3,task_030_V5_s992801
+4,18,5,10,8,0.1,1,0,0,0,992804,500,5000,1,0,1,max_sign_imag_gt_1e-3,task_033_V5_s992804
+5,18,6,10,8,0.1,1,0,0,0,992801,500,5000,1,0,1,sign_correction,task_036_V6_s992801
+6,18,6,10,8,0.1,1,0,0,0,992802,500,5000,1,0,1,max_sign_imag_gt_1e-3,task_037_V6_s992802

@@ -1,0 +1,13 @@
+{
+  "R_abs_diff": 0,
+  "S_pi_abs_diff": 0,
+  "S_pi_dq_abs_diff": 0,
+  "V": 4,
+  "center_boundary": 120,
+  "green_max_abs_diff": 0,
+  "operator_count": 200,
+  "operator_max_abs_diff": 0,
+  "physical_slices": 40,
+  "trial_slices": 40,
+  "weight_sign_abs_diff": 0
+}

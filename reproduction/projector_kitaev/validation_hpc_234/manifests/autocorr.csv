@@ -1,0 +1,7 @@
+task_id,L,V,theta,beta_trial,dt,delta,mu,boundary,hs_scheme,seed,burn,measurements,output_dir
+0,10,4,10,8,0.1,1,0,0,0,983001,500,10000,raw/autocorr/task_000_s983001
+1,10,4,10,8,0.1,1,0,0,0,983002,500,10000,raw/autocorr/task_001_s983002
+2,10,4,10,8,0.1,1,0,0,0,983003,500,10000,raw/autocorr/task_002_s983003
+3,10,4,10,8,0.1,1,0,0,0,983004,500,10000,raw/autocorr/task_003_s983004
+4,10,4,10,8,0.1,1,0,0,0,983005,500,10000,raw/autocorr/task_004_s983005
+5,10,4,10,8,0.1,1,0,0,0,983006,500,10000,raw/autocorr/task_005_s983006

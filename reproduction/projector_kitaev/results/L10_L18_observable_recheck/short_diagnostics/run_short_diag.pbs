@@ -1,0 +1,25 @@
+#!/bin/bash
+#PBS -N L18_short_diag
+#PBS -q workq
+#PBS -J 0-1
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=03:00:00
+#PBS -j oe
+set -euo pipefail
+
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+base="$root/results/L10_L18_observable_recheck/short_diagnostics"
+case "${PBS_ARRAY_INDEX:?}" in
+  0) V=3.8; seed=982001; out="$base/V3.8" ;;
+  1) V=4.6; seed=982002; out="$base/V4.6" ;;
+  *) exit 2 ;;
+esac
+
+mkdir -p "$out"
+set +u
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+set -u
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+cd "$root"
+./validation/static_guard_driver 18 8 8 0.1 "$V" 1 0 0 0 "$seed" 50 300 1 \
+  "$out/measurements.csv" 50 >"$out/result.json" 2>"$out/stderr.log"

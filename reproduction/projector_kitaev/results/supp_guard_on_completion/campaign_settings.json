@@ -1,0 +1,9 @@
+{
+  "group": "supp_guard_on_completion",
+  "task_count": 19,
+  "driver_kind": "guard",
+  "pbs_walltime": "48:00:00",
+  "manifest": "/home/sunxr/PfQMC-main/reproduction/projector_kitaev/results/supp_guard_on_completion/manifest.csv",
+  "guard_mode": "true",
+  "code_version": "source_identifier:PfQMC-main_20260821"
+}

@@ -1,0 +1,13 @@
+task_id,Vf,dt,seed,output_dir
+0,2,0.1,950001,results/hpc_contactfix_benchmark/task_000_vf2_dt01_s950001
+1,2,0.1,950002,results/hpc_contactfix_benchmark/task_001_vf2_dt01_s950002
+2,2,0.1,950003,results/hpc_contactfix_benchmark/task_002_vf2_dt01_s950003
+3,2,0.1,950004,results/hpc_contactfix_benchmark/task_003_vf2_dt01_s950004
+4,4,0.1,951001,results/hpc_contactfix_benchmark/task_004_vf4_dt01_s951001
+5,4,0.1,951002,results/hpc_contactfix_benchmark/task_005_vf4_dt01_s951002
+6,4,0.1,951003,results/hpc_contactfix_benchmark/task_006_vf4_dt01_s951003
+7,4,0.1,951004,results/hpc_contactfix_benchmark/task_007_vf4_dt01_s951004
+8,4,0.05,952001,results/hpc_contactfix_benchmark/task_008_vf4_dt005_s952001
+9,4,0.05,952002,results/hpc_contactfix_benchmark/task_009_vf4_dt005_s952002
+10,4,0.05,952003,results/hpc_contactfix_benchmark/task_010_vf4_dt005_s952003
+11,4,0.05,952004,results/hpc_contactfix_benchmark/task_011_vf4_dt005_s952004

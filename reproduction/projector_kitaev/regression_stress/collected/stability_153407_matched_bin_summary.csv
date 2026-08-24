@@ -1,0 +1,16 @@
+kind,comparison,metric,n_bins_total,n_bins_used,mean_difference,se_difference,z_paired,verdict
+guard,V4_off_vs_on,R_cdw,120,18,0.0,0.0,nan,pass
+guard,V4_off_vs_on,S_pi,120,18,0.0,0.0,nan,pass
+guard,V4_off_vs_on,S_pi_dq,120,18,0.0,0.0,nan,pass
+guard,V6_off_vs_on,R_cdw,120,18,0.010707484720496405,0.023259046939867647,0.46035784476375174,pass
+guard,V6_off_vs_on,S_pi,120,18,0.0025445312290111838,0.002777555014219091,0.9161047093522928,pass
+guard,V6_off_vs_on,S_pi_dq,120,18,0.0006813674711183548,0.0029413157240653484,0.2316539722490589,pass
+interval,10_vs_20,R_cdw,120,0,nan,nan,nan,invalid_low_sign
+interval,10_vs_20,S_pi,120,0,nan,nan,nan,invalid_low_sign
+interval,10_vs_20,S_pi_dq,120,0,nan,nan,nan,invalid_low_sign
+interval,5_vs_10,R_cdw,120,0,nan,nan,nan,invalid_low_sign
+interval,5_vs_10,S_pi,120,0,nan,nan,nan,invalid_low_sign
+interval,5_vs_10,S_pi_dq,120,0,nan,nan,nan,invalid_low_sign
+interval,5_vs_20,R_cdw,120,0,nan,nan,nan,invalid_low_sign
+interval,5_vs_20,S_pi,120,0,nan,nan,nan,invalid_low_sign
+interval,5_vs_20,S_pi_dq,120,0,nan,nan,nan,invalid_low_sign

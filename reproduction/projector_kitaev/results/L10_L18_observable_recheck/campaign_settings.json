@@ -1,0 +1,13 @@
+{
+  "task_count": 42,
+  "boundary": 0,
+  "hs_scheme": 0,
+  "delta": 1,
+  "mu": 0,
+  "beta_trial": 8,
+  "dt": 0.1,
+  "burn": 500,
+  "measurements": 5000,
+  "adaptive_guard": true,
+  "guard_threshold": 0.1
+}

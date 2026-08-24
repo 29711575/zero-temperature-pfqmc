@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#PBS -N drv_fail_audit
+#PBS -q workq
+#PBS -J 0-5
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=120:00:00
+#PBS -j oe
+set -euo pipefail
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+root=/home/sunxr/PfQMC-main
+base="$root/reproduction/driven_kitaev/results/driven_critical_rate_ratio"
+diag="$base/diagnostics"
+manifest="$diag/diagnostic_manifest.csv"
+i=${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}
+row=$(sed -n "$((i+2))p" "$manifest" | tr -d '\r')
+IFS=, read -r diag_id original_task_id L Vf rate seed burn measurements label <<< "$row"
+[[ "$diag_id" == "$i" ]] || exit 2
+out="$diag/failure_audit_runs/diag_${diag_id}_task_${original_task_id}"
+mkdir -p "$out"
+if [[ -s "$out/trigger.csv" ]]; then exit 0; fi
+set +u
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+set -u
+export LC_ALL=C LANG=C
+export PFQMC_FAILURE_DIAGNOSTIC_PATH="$out/trigger.csv"
+export PFQMC_BIN_RECORDS_PATH="$out/bin_records.csv" PFQMC_N_BINS=15
+export PFQMC_CODE_VERSION=driven-failure-audit-same-config-20260823
+export PFQMC_MULTIPRECISION_FALLBACK=OFF
+set +e
+"$diag/bin/driven_failure_diagnostic" "$L" 0 "$Vf" "$rate" 6 8 0.1 1 0 1 \
+  "$burn" "$measurements" "$seed" 0 0.8 >"$out/result.json.tmp" 2>"$out/stderr.log"
+rc=$?
+set -e
+printf 'diagnostic_exit_code=%s\njob_id=%s\narray_index=%s\noriginal_task_id=%s\n' \
+  "$rc" "${PBS_JOBID:-unknown}" "$i" "$original_task_id" >"$out/status.txt"
+exit 0

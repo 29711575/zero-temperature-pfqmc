@@ -1,0 +1,6 @@
+group,task_count
+supp_guard_on_completion,19
+projector_theta_convergence,72
+trotter_convergence,36
+guard_on_diagnostics,11
+trial_density_convergence,72

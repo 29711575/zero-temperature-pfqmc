@@ -1,0 +1,16 @@
+{
+  "Vf": 4,
+  "dt": 0.05,
+  "flips": 100,
+  "guard": true,
+  "guard_frequency": 0,
+  "guard_threshold": 0.1,
+  "guard_triggers": 0,
+  "max_error_after_reset": 0,
+  "max_error_before_reset": 5.24025267623176e-14,
+  "max_green_abs_error": 4.640767677298741e-14,
+  "max_ratio_complex_abs_error": 0,
+  "max_ratio_magnitude_abs_error": 0,
+  "min_denominator": 1,
+  "stb": 10
+}

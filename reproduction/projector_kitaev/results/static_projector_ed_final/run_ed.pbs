@@ -1,0 +1,10 @@
+#!/bin/bash
+#PBS -N static_ed_L6
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+out="$root/results/static_projector_ed_final/ed_reference.json"
+/usr/bin/python "$root/validation/static_projector_ed_pbc.py" --L 6 --V 2 --theta 10 --beta-trial 8 --dt 0.1 > "$out"

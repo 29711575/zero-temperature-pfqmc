@@ -1,0 +1,27 @@
+L,V,BC,theta,beta_trial,dt,guard,seeds,measurements/seed,<sign>,error,status,source
+6,0,PBC,10,8,0.1,off,12,5000,1,0,production/complete,validation_hpc_234/raw/benchmark
+6,2,PBC,10,8,0.1,off,12,5000,0.912367,0.001683,production/complete,validation_hpc_234/raw/benchmark
+6,4,PBC,10,8,0.1,off,12,5000,0.468867,0.003645,production/complete,validation_hpc_234/raw/benchmark
+6,6,PBC,10,8,0.1,off,12,5000,0.448100,0.003624,production/complete,validation_hpc_234/raw/benchmark
+6,0,OBC,10,8,0.1,off,12,5000,1,0,production/complete,validation_hpc_234/raw/benchmark
+6,2,OBC,10,8,0.1,off,12,5000,0.905867,0.001717,production/complete,validation_hpc_234/raw/benchmark
+6,4,OBC,10,8,0.1,off,12,5000,0.608867,0.003230,production/complete,validation_hpc_234/raw/benchmark
+6,6,OBC,10,8,0.1,off,12,5000,0.579400,0.003419,production/complete,validation_hpc_234/raw/benchmark
+18,3.8,PBC,8,8,0.1,on,3,5000,0.044533,0.008011,production/complete,results/L10_L18_observable_recheck
+18,4.0,PBC,8,8,0.1,on,3,5000,0.020267,0.007962,production/complete,results/L10_L18_observable_recheck
+18,4.0,PBC,10,8,0.1,on,3,5000,0.004933,0.008128,production/complete,results/L10_L18_observable_recheck
+18,4.0,PBC,12,8,0.1,on,3,5000,0.018800,0.008122,production/complete,results/L10_L18_observable_recheck
+18,4.2,PBC,8,8,0.1,on,3,5000,0.024000,0.008213,production/complete,results/L10_L18_observable_recheck
+18,4.4,PBC,8,8,0.1,on,3,5000,0.017200,0.008321,production/complete,results/L10_L18_observable_recheck
+18,4.6,PBC,8,8,0.1,on,3,5000,0.016667,0.007989,production/complete,results/L10_L18_observable_recheck
+18,3.8,PBC,8,8,0.1,on,1,5000,0.027200,0.013745,incomplete,results/supp_guard_on_completion
+18,4.0,PBC,10,8,0.1,on,4,5000,0.001000,0.006914,production/complete,results/supp_guard_on_completion
+18,4.0,PBC,12,8,0.1,on,4,5000,-0.001800,0.007178,production/complete,results/supp_guard_on_completion
+18,4.2,PBC,8,8,0.1,on,3,5000,0.014267,0.007985,production/complete,results/supp_guard_on_completion
+18,4.4,PBC,8,8,0.1,on,3,5000,0.026800,0.008069,production/complete,results/supp_guard_on_completion
+18,4.6,PBC,8,8,0.1,on,4,5000,0.012000,0.006977,production/complete,results/supp_guard_on_completion
+18,3.8,PBC,8,8,0.1,on,1,300,0.026667,0.044947,diagnostic/stress,results/L10_L18_observable_recheck/short_diagnostics/V3.8
+18,4.6,PBC,8,8,0.1,on,1,300,-0.046667,0.054346,diagnostic/stress,results/L10_L18_observable_recheck/short_diagnostics/V4.6
+18,3.8,unknown,8,unknown,unknown,unknown,1,NA,NA,NA,incomplete,results/L10_L18_observable_recheck/aligned_oracle/L18_V3.8
+18,4.6,unknown,8,unknown,unknown,unknown,1,NA,NA,NA,incomplete,results/L10_L18_observable_recheck/aligned_oracle/L18_V4.6
+20/40/80,NA,PBC/OBC,10,8,0.1,unknown,6 per L-BC,NA,NA,NA,diagnostic/stress,regression_stress/raw/gaussian_exact (no V or sign observable)

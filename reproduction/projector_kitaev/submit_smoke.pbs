@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#PBS -N pfqmc_proj_smoke
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+
+set -euo pipefail
+cd "${PBS_O_WORKDIR:?submit qsub from reproduction/projector_kitaev}"
+set +u
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh
+set -u
+command -v icpc
+export EIGEN3_INCLUDE_DIR=/home/sunxr/software/eigen-3.4.0
+export CXX=icpc MKLFLAG=-mkl
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+./build.sh
+out=results/hpc_convergence/smoke_L6_t0.2_seed6101
+mkdir -p "$out"
+if [[ -e "$out/result.json" ]]; then
+  echo "existing output retained: $out/result.json" >&2
+  exit 2
+fi
+./projector_driver 6 0.2 0.4 0.1 2 1 0 1 0 6101 1 2 1 \
+  >"$out/result.json" 2>"$out/stderr.log"
+ldd ./projector_driver >"$out/ldd.txt"
+printf 'status=complete\njob_id=%s\n' "${PBS_JOBID:-unknown}" >"$out/status.txt"

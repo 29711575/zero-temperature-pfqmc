@@ -1,0 +1,1 @@
+{"S_pi_dq":0.040884211281933466,"S_pi":0.1368796005914,"R_cdw":0.701312605345941,"V":2.0,"theta":10.0,"dt":0.1,"boundary":"PBC","beta_trial":8.0,"method":"static_projector_exact_PBC","L":6}

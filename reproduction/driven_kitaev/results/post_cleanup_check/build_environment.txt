@@ -1,0 +1,3 @@
+compiler=mpiicpc -std=c++14 -mkl
+boost=/home/sunxr/boost_1_70_0
+eigen=/home/sunxr/software/eigen-3.4.0

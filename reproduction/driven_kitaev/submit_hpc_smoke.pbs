@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#PBS -N pfqmc_driven_smoke
+#PBS -q workq
+#PBS -J 0-5
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail
+cd "${PBS_O_WORKDIR:?submit from reproduction/driven_kitaev}"
+i=${PBS_ARRAY_INDEX:?}; row=$(sed -n "$((i+2))p" manifest_hpc_smoke.csv | tr -d '\r')
+IFS=, read -r id L V0 Vf R theta beta dt delta mu boundary burn measurements seed out <<< "$row"
+[[ "$id" == "$i" && -x ./driven_driver ]] || exit 2
+mkdir -p "$out"; [[ ! -e "$out/result.json" ]] || exit 2
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+export PFQMC_BIN_RECORDS_PATH="$out/bin_records.csv"
+export PFQMC_CODE_VERSION="$(git rev-parse --verify HEAD 2>/dev/null || printf source-tree-no-git)"
+start=$(date +%s); set +e
+./driven_driver "$L" "$V0" "$Vf" "$R" "$theta" "$beta" "$dt" "$delta" "$mu" "$boundary" "$burn" "$measurements" "$seed" >"$out/result.json" 2>"$out/stderr.log"
+rc=$?; set -e
+printf 'status=%s\nexit_code=%s\njob_id=%s\nwrapper_seconds=%s\n' "$([[ $rc -eq 0 ]] && echo complete || echo failed)" "$rc" "${PBS_JOBID:-unknown}" "$(( $(date +%s)-start ))" >"$out/status.txt"
+exit "$rc"

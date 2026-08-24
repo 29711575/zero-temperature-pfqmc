@@ -1,0 +1,34 @@
+{
+  "raw_matrix_difference": {
+    "max_abs": 1.4142135623730951, 
+    "index": [
+      0, 
+      3
+    ], 
+    "imag": -1.0, 
+    "real": 1.0
+  }, 
+  "spectrum_max_abs_diff": 6.217248937900877e-15, 
+  "kinetic_raw_matrix_difference": {
+    "max_abs": 1.4142135623730951, 
+    "index": [
+      0, 
+      3
+    ], 
+    "imag": -1.0, 
+    "real": 1.0
+  }, 
+  "complex_standard": {
+    "S_pi_dq": 0.046296296296296294, 
+    "S_pi": 0.08333333333333326, 
+    "E0": -6.464101615137755, 
+    "R_cdw": 0.444444444444444
+  }, 
+  "first_spectrum_mismatch": null, 
+  "majorana": {
+    "S_pi_dq": 0.04629629629629638, 
+    "S_pi": 0.08333333333333341, 
+    "E0": -6.464101615137757, 
+    "R_cdw": 0.444444444444444
+  }
+}

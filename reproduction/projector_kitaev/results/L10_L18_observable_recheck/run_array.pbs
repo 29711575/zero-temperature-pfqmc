@@ -1,0 +1,20 @@
+#!/bin/bash
+#PBS -N L10L18_obscheck
+#PBS -q workq
+#PBS -J 0-41
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=48:00:00
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+work="$root/results/L10_L18_observable_recheck"
+row=$(awk -F, -v i="${PBS_ARRAY_INDEX:?}" 'NR==i+2{print;exit}' "$work/manifest.csv" | tr -d '\r')
+IFS=, read -r task_id L V theta beta_trial dt delta mu boundary hs_scheme seed burn measurements threads adaptive_guard guard_threshold diagnostic_stride output_dir <<< "$row"
+[[ "$task_id" == "$PBS_ARRAY_INDEX" && "$boundary" == 0 && "$hs_scheme" == 0 && "$adaptive_guard" == true ]] || exit 2
+out="$root/$output_dir"; mkdir -p "$out"
+[[ ! -e "$out/result.json" ]] || { echo "existing output retained" >&2; exit 3; }
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+cd "$root"
+./validation/static_guard_driver "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" "$burn" "$measurements" "$threads" "$out/measurements.csv" "$diagnostic_stride" >"$out/result.json" 2>"$out/stderr.log"
+printf 'status=complete\njob_id=%s\n' "${PBS_JOBID:-unknown}" >"$out/status.txt"

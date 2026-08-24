@@ -1,0 +1,2 @@
+resubmitted_job=153360.mgt
+ed_environment=/usr/bin/python numpy=1.16.6 scipy=1.2.3

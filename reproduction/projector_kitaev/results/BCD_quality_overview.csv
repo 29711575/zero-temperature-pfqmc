@@ -1,0 +1,4 @@
+group,completed,numerical_threshold_fail,sign_corrections_total,guard_rebuild_total,guard_trigger_fraction_max,diagnostic_sign_mismatch_total
+projector_theta_convergence,72,0,0.0,nan,nan,nan
+trotter_convergence,36,2,0.0,nan,nan,nan
+guard_on_diagnostics,11,11,361.0,1005642.0,0.034127651515151514,110.0

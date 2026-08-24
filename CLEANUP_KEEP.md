@@ -1,0 +1,21 @@
+# KEEP
+
+- src/**
+- inc/pfapack/**
+- inc/kitaevChain.h
+- inc/pfqmc.h
+- inc/spinless_tV.h
+- inc/operator.h
+- inc/types.h
+- inc/skewMatUtils.h
+- inc/qr_udt.h
+- test/**
+- reproduction/projector_kitaev/**
+- reproduction/driven_kitaev/**
+- driven_fastupdate_check.cpp
+- CMakeLists.txt
+- Makefile
+- main.cpp
+- README.md
+- LICENSE
+- .github/**

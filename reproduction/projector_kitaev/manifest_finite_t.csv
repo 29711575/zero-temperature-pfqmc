@@ -1,0 +1,5 @@
+task_id,L,beta,dt,V,delta,seed,burn,measurements,threads,output_dir
+0,6,8,0.1,2,1,682101,100,500,1,results/hpc_convergence/finite_t/task_000_L6_V2_b8_s682101
+1,6,12,0.1,2,1,6122101,100,500,1,results/hpc_convergence/finite_t/task_001_L6_V2_b12_s6122101
+2,6,8,0.1,4,1,684101,100,500,1,results/hpc_convergence/finite_t/task_002_L6_V4_b8_s684101
+3,6,12,0.1,4,1,6124101,100,500,1,results/hpc_convergence/finite_t/task_003_L6_V4_b12_s6124101

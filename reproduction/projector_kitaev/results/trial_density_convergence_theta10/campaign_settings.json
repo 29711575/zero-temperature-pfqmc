@@ -1,0 +1,7 @@
+{
+  "guard_mode": false,
+  "theta": 10,
+  "stabilization_interval": 10,
+  "sign_recompute_stride": 20,
+  "bin_records": "per-task measurements.csv; collector creates contiguous bin records"
+}

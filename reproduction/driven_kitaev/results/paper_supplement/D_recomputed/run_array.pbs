@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N D_recomp
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -J 0-23
+#PBS -j oe
+set -euo pipefail
+o=/home/sunxr/PfQMC-main/reproduction/driven_kitaev/results/paper_supplement/D_recomputed
+r=$(awk -F, -v i=$PBS_ARRAY_INDEX 'NR==i+2{print}' $o/manifest.csv); IFS=, read -r id subset s <<<$r
+d=$o/raw/task_${id}_${subset}_s${s}; mkdir -p $d; test ! -e $d/result.json
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+/home/sunxr/PfQMC-main/reproduction/driven_kitaev/results/paper_supplement/bin/projector_bins_driver_cxx14 10 8 8 .1 2 1 0 0 0 $s 500 5000 1 $d/measurements.csv 0 >$d/result.json 2>$d/stderr.log
+sha256sum $d/result.json $d/measurements.csv >$d/sha256.txt

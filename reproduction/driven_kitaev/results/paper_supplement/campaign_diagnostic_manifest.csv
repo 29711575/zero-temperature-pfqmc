@@ -1,0 +1,7 @@
+task_id,origin,seed,L,V,theta,beta_trial,dt,delta,mu,boundary,hs_scheme,burn,measurements,threads,adaptive_guard,multiprecision_fallback,stabilization_interval,sign_recompute_stride
+0,theta_campaign,990001,10,2,8,8,0.1,1,0,0,0,500,5000,1,false,false,10,20
+1,theta_campaign,990002,10,2,8,8,0.1,1,0,0,0,500,5000,1,false,false,10,20
+2,theta_campaign,990003,10,2,8,8,0.1,1,0,0,0,500,5000,1,false,false,10,20
+3,trotter_campaign,990101,10,2,8,8,0.1,1,0,0,0,500,5000,1,false,false,10,20
+4,trotter_campaign,990102,10,2,8,8,0.1,1,0,0,0,500,5000,1,false,false,10,20
+5,trotter_campaign,990103,10,2,8,8,0.1,1,0,0,0,500,5000,1,false,false,10,20

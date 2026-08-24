@@ -1,0 +1,26 @@
+#!/bin/bash
+#PBS -N rs_delta_symmetry
+#PBS -q workq
+#PBS -J 0-47
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=120:00:00
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+base="$root/regression_stress"; manifest="$base/manifests/delta_symmetry.csv"
+row=$(awk -F, -v i="${PBS_ARRAY_INDEX:?}" 'NR==i+2{print;exit}' "$manifest" | tr -d '')
+IFS=, read -r task_id campaign L V theta beta_trial dt delta mu boundary hs_scheme seed burn measurements stb guard diagnostic_stride sign_stride output_dir <<< "$row"
+[[ "$task_id" == "$PBS_ARRAY_INDEX" ]] || exit 2
+out="$base/$output_dir"; mkdir -p "$out"
+if [[ -s "$out/result.json" ]]; then exit 0; fi
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+cd "$root"
+set +e
+"$base/bin/regression_driver" "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" "$burn" "$measurements" 1 "$out/measurements.csv" "$diagnostic_stride" "$stb" "$guard" "$sign_stride" >"$out/result.json.tmp" 2>"$out/stderr.log"
+rc=$?; set -e
+if [[ $rc -eq 0 ]]; then mv "$out/result.json.tmp" "$out/result.json"; printf 'status=complete
+job_id=%s
+' "${PBS_JOBID:-unknown}" >"$out/status.txt"; else printf 'status=failed
+exit_code=%s
+' "$rc" >"$out/status.txt"; exit "$rc"; fi

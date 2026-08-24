@@ -1,0 +1,13 @@
+task_id,campaign,L,V,theta,beta_trial,dt,delta,mu,boundary,hs_scheme,seed,burn,measurements,threads,adaptive_guard,guard_threshold,multiprecision_fallback,full_rebuild_diagnostic,diagnostic_stride,stabilization_interval,sign_recompute_stride,output_dir,code_version
+0,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990201,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_000_s990201,source_identifier:PfQMC-main_20260821
+1,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990202,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_001_s990202,source_identifier:PfQMC-main_20260821
+2,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990203,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_002_s990203,source_identifier:PfQMC-main_20260821
+3,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990204,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_003_s990204,source_identifier:PfQMC-main_20260821
+4,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990205,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_004_s990205,source_identifier:PfQMC-main_20260821
+5,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990206,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_005_s990206,source_identifier:PfQMC-main_20260821
+6,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990207,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_006_s990207,source_identifier:PfQMC-main_20260821
+7,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990208,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_007_s990208,source_identifier:PfQMC-main_20260821
+8,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990209,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_008_s990209,source_identifier:PfQMC-main_20260821
+9,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990210,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_009_s990210,source_identifier:PfQMC-main_20260821
+10,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990211,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_010_s990211,source_identifier:PfQMC-main_20260821
+11,production_trotter_theta10,10,2.0,10,8,0.05,1,0,0,0,990212,500,5000,1,false,,false,false,0,10,20,results/production_trotter_theta10/raw/task_011_s990212,source_identifier:PfQMC-main_20260821
