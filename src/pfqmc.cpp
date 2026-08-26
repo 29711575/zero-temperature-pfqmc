@@ -1,7 +1,32 @@
 #include "pfqmc.h"
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <stdexcept>
+
+namespace {
+double leftRecoveryRelativeError(const MatType &a, const MatType &b)
+{
+    return (a-b).norm()/std::max(b.norm(), std::numeric_limits<double>::min());
+}
+
+double leftRecoveryStructureResidual(const MatType &green)
+{
+    const MatType residual = green + green.transpose()
+                           - 2.0*MatType::Identity(green.rows(), green.cols());
+    return residual.norm()/std::max(green.norm(),
+                                    std::numeric_limits<double>::min());
+}
+
+bool leftRecoveryFinite(const MatType &green)
+{
+    for (int j=0; j<green.cols(); ++j)
+        for (int i=0; i<green.rows(); ++i)
+            if (!std::isfinite(green(i,j).real()) ||
+                !std::isfinite(green(i,j).imag())) return false;
+    return true;
+}
+}
 
 PfQMC::PfQMC(Spinless_tV *walker, int _stb)
 {
@@ -178,6 +203,57 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
     }
 }
 
+bool PfQMC::recoverLeftGreenAfterOperation(
+    const char *source, int boundary, int aux, double structurePreOperation)
+{
+    const double structureBefore = leftRecoveryStructureResidual(g);
+    const double structureDelta = std::abs(structureBefore-structurePreOperation);
+    const bool alarm = !leftRecoveryFinite(g) ||
+        (structureBefore > left_recovery_structure_threshold &&
+         structureDelta > left_recovery_structure_delta_threshold);
+    if (!alarm) return false;
+
+    MatType rebuilt;
+    rebuildGreenFromFullContourAtBoundary(boundary, rebuilt);
+    LeftGreenRecoveryEvent event;
+    event.source = source;
+    event.boundary = boundary;
+    event.aux = aux;
+    event.green_error_before = leftRecoveryRelativeError(g, rebuilt);
+    event.structure_pre_operation = structurePreOperation;
+    event.structure_delta = structureDelta;
+    event.structure_before = structureBefore;
+    event.structure_after = leftRecoveryStructureResidual(rebuilt);
+    g.swap(rebuilt);
+    if (event.source == "PROPAGATION") ++left_recovery_propagation_count;
+    else ++left_recovery_rank_update_count;
+    if (left_recovery_event_hook) left_recovery_event_hook(event);
+    return true;
+}
+
+DataType PfQMC::leftRecoveryUpdateAtBoundary(Operator *op, int boundary)
+{
+    const int proposalCount = op->singleFlipProposalCount();
+    if (proposalCount <= 0) return op->update(g);
+
+    DataType signCur(1);
+    for (int aux=0; aux<proposalCount; ++aux) {
+        const double structurePreOperation = leftRecoveryStructureResidual(g);
+        double uniform = 0.0;
+        if (!op->prepareSingleFlip(g, aux, &uniform))
+            throw std::runtime_error(
+                "single-field proposal unexpectedly unavailable");
+        ++proposal_attempt_count;
+        const DataType ratio = op->preparedRatio();
+        const bool accept = uniform < std::abs(ratio);
+        signCur *= op->finishSingleFlip(g, accept, true);
+        if (accept)
+            recoverLeftGreenAfterOperation(
+                "RANK_UPDATE", boundary, aux, structurePreOperation);
+    }
+    return signCur;
+}
+
 void PfQMC::leftSweep()
 {
     MatType tmp = MatType::Identity(nDim, nDim);
@@ -186,10 +262,19 @@ void PfQMC::leftSweep()
     DataType signCur;
     for (int l = op_length - 1; l > -1; l--)
     {
+        const double structurePrePropagation = left_green_recovery
+            ? leftRecoveryStructureResidual(g) : 0.0;
         op_array[l]->right_propagate(g, tmp);
-        signCur = op_array[l]->update(g);
+        if (left_green_recovery)
+            recoverLeftGreenAfterOperation(
+                "PROPAGATION", l, -1, structurePrePropagation);
+        signCur = left_green_recovery
+            ? leftRecoveryUpdateAtBoundary(op_array[l], l)
+            : op_array[l]->update(g);
         sign *= signCur;
-        
+
+        const double structurePreCompletion = left_green_recovery
+            ? leftRecoveryStructureResidual(g) : 0.0;
         op_array[l]->right_multiply(Aseg, tmp);
         std::swap(Aseg, tmp);
         if (need_stabilization[l])
@@ -218,6 +303,9 @@ void PfQMC::leftSweep()
             }
             curSeg--;
             // std::cout<<"left g recal "<<(g2-g).norm()<<std::endl;
+            if (left_green_recovery)
+                recoverLeftGreenAfterOperation(
+                    "PROPAGATION", l, -1, structurePreCompletion);
         }
     }
 }

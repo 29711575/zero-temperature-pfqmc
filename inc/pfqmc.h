@@ -7,7 +7,20 @@
 #include <functional>
 #include <limits>
 #include <stdexcept>
+#include <string>
 #include <vector>
+
+struct LeftGreenRecoveryEvent
+{
+    std::string source;
+    int boundary = -1;
+    int aux = -1;
+    double green_error_before = 0.0;
+    double structure_pre_operation = 0.0;
+    double structure_delta = 0.0;
+    double structure_before = 0.0;
+    double structure_after = 0.0;
+};
 
 class PfQMC
 {
@@ -44,6 +57,16 @@ public:
     long long multiprecision_proxy_trigger_count = 0;
     std::vector<double> multiprecision_condition_samples;
 
+    // Optional Green-only recovery for the legacy left sweep. It is inert by
+    // default and never changes a proposal, uniform, acceptance, HS field, or
+    // transported sign. A triggered operation is rebuilt at most once.
+    bool left_green_recovery = false;
+    double left_recovery_structure_threshold = 1e-10;
+    double left_recovery_structure_delta_threshold = 1e-10;
+    long long left_recovery_rank_update_count = 0;
+    long long left_recovery_propagation_count = 0;
+    std::function<void(const LeftGreenRecoveryEvent &)> left_recovery_event_hook;
+
     PfQMC(Spinless_tV *walker, int _stb = 10);
 
     void configureAdaptiveGuard(bool enabled, double threshold,
@@ -60,6 +83,21 @@ public:
         multiprecision_fallback = enabled;
         multiprecision_core_condition_threshold = core_condition_threshold;
         multiprecision_rebuild_callback = std::move(callback);
+    }
+
+    void configureLeftSweepGreenRecovery(
+        bool enabled, double structure_threshold = 1e-10,
+        double structure_delta_threshold = 1e-10)
+    {
+        left_green_recovery = enabled;
+        left_recovery_structure_threshold = structure_threshold;
+        left_recovery_structure_delta_threshold = structure_delta_threshold;
+    }
+
+    void configureLeftSweepGreenRecoveryEventHook(
+        std::function<void(const LeftGreenRecoveryEvent &)> hook)
+    {
+        left_recovery_event_hook = std::move(hook);
     }
 
     void rightInit()
@@ -214,6 +252,10 @@ public:
         const auto s = svd.singularValues();
         return s(0) / std::max(s(s.size()-1), std::numeric_limits<double>::min());
     }
+    DataType leftRecoveryUpdateAtBoundary(Operator *op, int boundary);
+    bool recoverLeftGreenAfterOperation(const char *source, int boundary,
+                                        int aux,
+                                        double structure_pre_operation);
     void leftSweep();
 
     // get sign by computing the pfaffian of
