@@ -6,11 +6,85 @@
 #ifdef PFQMC_SCALE_SAFE_UDT
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <limits>
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+// Enabled by default for scale-safe UDT builds. A no-guard build is retained
+// only for matched validation against the already validated production path.
+#ifndef PFQMC_UDT_RANK_LOSS_GUARD_BITS
+#define PFQMC_UDT_RANK_LOSS_GUARD_BITS 45
+#endif
+
+static constexpr double scaleSafeUDTRankLossGuardBits =
+    double(PFQMC_UDT_RANK_LOSS_GUARD_BITS);
+// The unchanged production MGS path reaches 1.8627e-7 on the audited
+// n=12, +/-20 control while retaining 1e-16 reconstruction/solve residuals.
+// The first known unsafe case is O(1).  Keep a conservative separating gate
+// without changing the factorization through reorthogonalization.
+static constexpr double scaleSafeUDTPartialQOrthogonalityLimit = 1.0e-6;
+
+#ifndef PFQMC_UDT_ORTHOGONALITY_PRECHECK_BITS
+#define PFQMC_UDT_ORTHOGONALITY_PRECHECK_BITS 32
+#endif
+// Real QMC reached 9.081953 bits; the first audited orthogonality alarm was
+// 37.549 bits.  32 bits leaves >22 bits above real QMC and >5 bits before that
+// synthetic alarm while retaining the formal 45-bit fail threshold unchanged.
+static constexpr double scaleSafeUDTOrthogonalityPrecheckBits =
+    double(PFQMC_UDT_ORTHOGONALITY_PRECHECK_BITS);
+
+class ScaleSafeQRGuardFailure : public std::runtime_error
+{
+public:
+    explicit ScaleSafeQRGuardFailure(const std::string &message)
+        : std::runtime_error(message) {}
+};
+
+struct ScaleSafeQRGuardDiagnostics
+{
+    std::uint64_t trigger_count = 0;
+    double max_lost_bits = 0.0;
+    double min_guard_margin = std::numeric_limits<double>::infinity();
+    int last_matrix_size = 0;
+    int last_pivot = -1;
+    double last_lost_bits = 0.0;
+    double last_exponent_span = 0.0;
+    double last_orthogonality_residual = 0.0;
+};
+
+inline ScaleSafeQRGuardDiagnostics &scaleSafeQRGuardDiagnostics()
+{
+    static ScaleSafeQRGuardDiagnostics diagnostics;
+    return diagnostics;
+}
+
+inline void resetScaleSafeQRGuardDiagnostics()
+{
+    scaleSafeQRGuardDiagnostics() = ScaleSafeQRGuardDiagnostics();
+}
+
+[[noreturn]] inline void scaleSafeQRGuardFail(const char *reason, int n, int pivot,
+    double lost_bits, double exponent_span, double orthogonality_residual)
+{
+    ScaleSafeQRGuardDiagnostics &diagnostics = scaleSafeQRGuardDiagnostics();
+    ++diagnostics.trigger_count;
+    diagnostics.last_matrix_size = n;
+    diagnostics.last_pivot = pivot;
+    diagnostics.last_lost_bits = lost_bits;
+    diagnostics.last_exponent_span = exponent_span;
+    diagnostics.last_orthogonality_residual = orthogonality_residual;
+    std::ostringstream message;
+    message << std::setprecision(17) << "scale-safe exponent QR guard: " << reason
+            << "; n=" << n << "; pivot=" << pivot << "; lost_bits=" << lost_bits
+            << "; exponent_span=" << exponent_span
+            << "; orthogonality_residual=" << orthogonality_residual;
+    throw ScaleSafeQRGuardFailure(message.str());
+}
 
 inline bool scaleSafeFinite(const MatType &a)
 {
@@ -166,16 +240,62 @@ public:
             throw std::runtime_error("scale-safe exponent QR invalid prepared columns");
         MatType q=MatType::Zero(n,n), t=MatType::Zero(n,n);
         std::vector<int> permutation(n);
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+        ScaleSafeQRGuardDiagnostics &guard=scaleSafeQRGuardDiagnostics();
+        std::vector<double> original_log2_norm(n,0.0);
+        double exponent_span=std::numeric_limits<double>::infinity();
+        int active_pivot=-1;
+        double active_lost_bits=std::numeric_limits<double>::infinity();
+        double active_orthogonality=std::numeric_limits<double>::infinity();
+#endif
         for(int j=0;j<n;++j) permutation[j]=j;
-        const auto renormalize=[&](int j) {
-            const double norm=work.col(j).stableNorm();
-            if(!(norm>0.0) || !std::isfinite(norm))
+        const auto renormalize=[&](int j,double known_norm) {
+            const double norm=known_norm>0.0?known_norm:work.col(j).stableNorm();
+            if(!(norm>0.0) || !std::isfinite(norm)) {
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+                scaleSafeQRGuardFail("zero/nonfinite column during power-of-two normalization",
+                    n,active_pivot>=0?active_pivot:j,active_lost_bits,
+                    exponent_span,active_orthogonality);
+#else
                 throw std::runtime_error("scale-safe exponent QR rank loss/nonfinite column");
-            int e=0; std::frexp(norm,&e); work.col(j)*=scaleSafePow2(-e); exponent(j)+=e;
+#endif
+            }
+            int e=0; std::frexp(norm,&e);
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+            const long long updated_exponent=static_cast<long long>(exponent(j))+e;
+            if(updated_exponent<std::numeric_limits<int>::min() ||
+               updated_exponent>std::numeric_limits<int>::max())
+                scaleSafeQRGuardFail("column exponent bookkeeping overflow",n,
+                    active_pivot>=0?active_pivot:j,active_lost_bits,
+                    exponent_span,active_orthogonality);
+#endif
+            work.col(j)*=scaleSafePow2(-e); exponent(j)+=e;
         };
-        for(int j=0;j<n;++j) renormalize(j);
+        for(int j=0;j<n;++j) {
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+            const double original_norm=work.col(j).stableNorm();
+            if(!(original_norm>0.0) || !std::isfinite(original_norm))
+                scaleSafeQRGuardFail("zero/nonfinite original column",n,j,
+                    std::numeric_limits<double>::infinity(),
+                    std::numeric_limits<double>::infinity(),
+                    std::numeric_limits<double>::infinity());
+            original_log2_norm[j]=double(exponent(j))+std::log2(original_norm);
+            renormalize(j,original_norm);
+#else
+            renormalize(j,-1.0);
+#endif
+        }
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+        exponent_span=*std::max_element(original_log2_norm.begin(),original_log2_norm.end())-
+                      *std::min_element(original_log2_norm.begin(),original_log2_norm.end());
+#endif
         UDT out; out.nDim=n; out.D.resize(n); out.Dexp.resize(n);
         for(int k=0;k<n;++k) {
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+            active_pivot=k;
+            active_lost_bits=std::numeric_limits<double>::infinity();
+            active_orthogonality=0.0;
+#endif
             int pivot=k;
             for(int j=k+1;j<n;++j) {
                 if(exponent(j)>exponent(pivot) ||
@@ -184,19 +304,86 @@ public:
             if(pivot!=k) {
                 work.col(k).swap(work.col(pivot)); std::swap(exponent(k),exponent(pivot));
                 std::swap(permutation[k],permutation[pivot]);
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+                std::swap(original_log2_norm[k],original_log2_norm[pivot]);
+#endif
             }
             const double norm=work.col(k).stableNorm();
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+            if(!(norm>0.0) || !std::isfinite(norm))
+                scaleSafeQRGuardFail("zero/nonfinite pivot residual",n,k,
+                    std::numeric_limits<double>::infinity(),exponent_span,
+                    std::numeric_limits<double>::infinity());
+            const double residual_log2_norm=double(exponent(k))+std::log2(norm);
+            const double lost_bits=original_log2_norm[k]-residual_log2_norm;
+            active_lost_bits=lost_bits;
+            guard.max_lost_bits=std::max(guard.max_lost_bits,lost_bits);
+            guard.min_guard_margin=std::min(guard.min_guard_margin,
+                scaleSafeUDTRankLossGuardBits-lost_bits);
+            if(!std::isfinite(lost_bits) || lost_bits>scaleSafeUDTRankLossGuardBits)
+                scaleSafeQRGuardFail("rank loss before normalization",n,k,lost_bits,
+                    exponent_span,0.0);
+#endif
             int diag_e=0; const double diag_m=std::frexp(norm,&diag_e);
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+            const long long combined_exponent=static_cast<long long>(exponent(k))+diag_e;
+            if(!(diag_m>=0.5 && diag_m<1.0) || !std::isfinite(diag_m) ||
+               combined_exponent<std::numeric_limits<int>::min() ||
+               combined_exponent>std::numeric_limits<int>::max())
+                scaleSafeQRGuardFail("invalid D mantissa/exponent bookkeeping",n,k,
+                    lost_bits,exponent_span,0.0);
+#endif
             out.D(k)=diag_m; out.Dexp(k)=exponent(k)+diag_e;
             q.col(k)=work.col(k)/norm; t(k,permutation[k])=1.0;
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+            double orthogonality_residual=0.0;
+            for(int i=0;i<n;++i)
+                if(!std::isfinite(q(i,k).real()) || !std::isfinite(q(i,k).imag()))
+                    scaleSafeQRGuardFail("nonfinite Q column after normalization",n,k,
+                        lost_bits,exponent_span,std::numeric_limits<double>::infinity());
+            if(lost_bits>=scaleSafeUDTOrthogonalityPrecheckBits) {
+                const MatType partial_q=q.leftCols(k+1);
+                const MatType partial_gram=partial_q.adjoint()*partial_q-
+                    MatType::Identity(k+1,k+1);
+                orthogonality_residual=partial_gram.norm()/std::sqrt(double(k+1));
+                active_orthogonality=orthogonality_residual;
+                if(!std::isfinite(orthogonality_residual) ||
+                   orthogonality_residual>scaleSafeUDTPartialQOrthogonalityLimit)
+                    scaleSafeQRGuardFail("nonunitary staged partial Q after normalization",n,k,
+                        lost_bits,exponent_span,orthogonality_residual);
+            }
+#endif
             for(int j=k+1;j<n;++j) {
                 DataType c1=q.col(k).dot(work.col(j)); work.col(j)-=q.col(k)*c1;
                 DataType c2=q.col(k).dot(work.col(j)); work.col(j)-=q.col(k)*c2;
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+                const long long shift_wide=static_cast<long long>(exponent(j))-out.Dexp(k);
+                if(shift_wide<std::numeric_limits<int>::min() ||
+                   shift_wide>std::numeric_limits<int>::max())
+                    scaleSafeQRGuardFail("T exponent bookkeeping overflow",n,k,lost_bits,
+                        exponent_span,orthogonality_residual);
+                const int shift=static_cast<int>(shift_wide);
+#else
                 const int shift=exponent(j)-out.Dexp(k);
+#endif
                 t(k,permutation[j])=scaleSafeLdexp((c1+c2)/diag_m,shift);
-                renormalize(j);
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+                const DataType coefficient=t(k,permutation[j]);
+                if(!std::isfinite(coefficient.real()) || !std::isfinite(coefficient.imag()))
+                    scaleSafeQRGuardFail("nonfinite T bookkeeping",n,k,lost_bits,
+                        exponent_span,orthogonality_residual);
+#endif
+                renormalize(j,-1.0);
             }
         }
+#ifndef PFQMC_UDT_DISABLE_RANK_LOSS_GUARD
+        const MatType final_gram=q.adjoint()*q-MatType::Identity(n,n);
+        const double final_orthogonality_residual=final_gram.norm()/std::sqrt(double(n));
+        if(!std::isfinite(final_orthogonality_residual) ||
+           final_orthogonality_residual>scaleSafeUDTPartialQOrthogonalityLimit)
+            scaleSafeQRGuardFail("nonunitary final Q before factorization return",n,n-1,
+                guard.max_lost_bits,exponent_span,final_orthogonality_residual);
+#endif
         out.U=q; out.T=t;
         if(!scaleSafeFinite(out.U)||!scaleSafeFinite(out.T))
             throw std::runtime_error("scale-safe exponent QR produced nonfinite factors");
