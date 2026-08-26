@@ -244,6 +244,7 @@ public:
         ScaleSafeQRGuardDiagnostics &guard=scaleSafeQRGuardDiagnostics();
         std::vector<double> original_log2_norm(n,0.0);
         double exponent_span=std::numeric_limits<double>::infinity();
+        double factorization_max_lost_bits=0.0;
         int active_pivot=-1;
         double active_lost_bits=std::numeric_limits<double>::infinity();
         double active_orthogonality=std::numeric_limits<double>::infinity();
@@ -317,6 +318,7 @@ public:
             const double residual_log2_norm=double(exponent(k))+std::log2(norm);
             const double lost_bits=original_log2_norm[k]-residual_log2_norm;
             active_lost_bits=lost_bits;
+            factorization_max_lost_bits=std::max(factorization_max_lost_bits,lost_bits);
             guard.max_lost_bits=std::max(guard.max_lost_bits,lost_bits);
             guard.min_guard_margin=std::min(guard.min_guard_margin,
                 scaleSafeUDTRankLossGuardBits-lost_bits);
@@ -382,7 +384,7 @@ public:
         if(!std::isfinite(final_orthogonality_residual) ||
            final_orthogonality_residual>scaleSafeUDTPartialQOrthogonalityLimit)
             scaleSafeQRGuardFail("nonunitary final Q before factorization return",n,n-1,
-                guard.max_lost_bits,exponent_span,final_orthogonality_residual);
+                factorization_max_lost_bits,exponent_span,final_orthogonality_residual);
 #endif
         out.U=q; out.T=t;
         if(!scaleSafeFinite(out.U)||!scaleSafeFinite(out.T))

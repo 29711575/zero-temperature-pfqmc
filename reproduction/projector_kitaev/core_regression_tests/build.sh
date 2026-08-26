@@ -31,4 +31,12 @@ build_header udt_guard_stress udt_guard_stress_driver.cpp
 "$CXX" "${common[@]}" -DPFQMC_TEST_FORCE_ZERO_AVERAGE_SIGN \
   "$root/reproduction/projector_kitaev/projector_driver.cpp" "${core[@]}" \
   -o "$PFQMC_TEST_BUILD_DIR/bin/projector_zero_sign"
+for mode in projector_bins static_guard; do
+  source_file="$root/reproduction/projector_kitaev/validation/${mode}_driver.cpp"
+  "$CXX" "${common[@]}" "$source_file" "${core[@]}" \
+    -o "$PFQMC_TEST_BUILD_DIR/bin/$mode"
+  "$CXX" "${common[@]}" -DPFQMC_TEST_FORCE_ZERO_AVERAGE_SIGN \
+    "$source_file" "${core[@]}" \
+    -o "$PFQMC_TEST_BUILD_DIR/bin/${mode}_zero_sign"
+done
 sha256sum "$PFQMC_TEST_BUILD_DIR"/bin/*

@@ -10,6 +10,7 @@
 #include "kitaevChain.h"
 #include "pfqmc.h"
 #include "projector_contour.h"
+#include "projector_json.h"
 
 namespace {
 struct Args { int L,boundary,hs,seed,burn,measurements,threads,diag_stride; double theta,beta,dt,V,delta,mu; std::string csv; };
@@ -45,9 +46,50 @@ int main(int argc,char**argv)try{
   raw<<k<<','<<s<<','<<s*p<<','<<s*d<<','<<p<<','<<d<<','<<r<<','<<(attempted?double(accepted)/attempted:0)<<','<<rel<<','<<dp<<','<<dr<<','<<sm<<'\n';
   before.swap(after);q.leftSweep();after=fields(w);accepted+=changes(before,after);attempted+=before.size();
  }
- if(std::abs(ss)<1e-12)throw std::runtime_error("zero average sign");
- for(int b=0;b<nb;++b)if(bn[b]&&std::abs(bs[b])>1e-12){double p=bp[b]/bs[b],d=bd[b]/bs[b];brs.push_back(bs[b]/bn[b]);brp.push_back(p);brd.push_back(d);brr.push_back(1-d/p);}
- double p=sp/ss,d=sd/ss,r=1-d/p,run=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();double gf=q.proposal_attempt_count?double(q.pre_decision_rebuild_count)/q.proposal_attempt_count:0;
- std::cout<<std::setprecision(17)<<"{\"mode\":\"static_note_projector\",\"L\":"<<a.L<<",\"theta\":"<<a.theta<<",\"beta_trial\":"<<a.beta<<",\"dt\":"<<a.dt<<",\"V\":"<<a.V<<",\"delta\":"<<a.delta<<",\"mu\":"<<a.mu<<",\"boundary\":"<<a.boundary<<",\"hs_scheme\":"<<a.hs<<",\"seed\":"<<a.seed<<",\"burn\":"<<a.burn<<",\"measurements\":"<<a.measurements<<",\"physical_slices\":"<<ns<<",\"trial_slices\":"<<w.ntrial<<",\"observable_convention\":\"physical_density_SQ_equals_minus_legacy_contact_already_included\",\"S_pi\":"<<p<<",\"S_pi_err\":"<<se(brp)<<",\"S_pi_dq\":"<<d<<",\"S_pi_dq_err\":"<<se(brd)<<",\"R_cdw\":"<<r<<",\"R_cdw_err\":"<<se(brr)<<",\"average_sign\":"<<ss/a.measurements<<",\"average_sign_err\":"<<se(brs)<<",\"acceptance\":"<<double(accepted)/attempted<<",\"runtime_seconds\":"<<run<<",\"negative_signs\":"<<neg<<",\"sign_recomputes\":"<<recomp<<",\"sign_corrections\":"<<corr<<",\"max_sign_imag\":"<<maxsi<<",\"max_observable_imag\":"<<maxoi<<",\"adaptive_guard\":false,\"guard_threshold\":"<<guard_threshold<<",\"proposal_attempt_count\":"<<q.proposal_attempt_count<<",\"min_update_denominator\":"<<q.min_update_denominator<<",\"guard_trigger_fraction\":"<<gf<<",\"adaptive_rebuild_count\":"<<q.adaptive_rebuild_count<<",\"pre_decision_rebuild_count\":"<<q.pre_decision_rebuild_count<<",\"post_accept_rebuild_count\":"<<q.post_accept_rebuild_count<<",\"full_rebuild_count\":"<<q.adaptive_rebuild_count<<",\"multiprecision_fallback\":false,\"multiprecision_fallback_count\":"<<q.multiprecision_fallback_count<<",\"diagnostic_stride\":"<<a.diag_stride<<",\"diagnostic_comparisons\":"<<diag_n<<",\"diagnostic_relative_frobenius_max\":"<<maxgf<<",\"diagnostic_S_pi_abs_diff_max\":"<<maxdp<<",\"diagnostic_R_cdw_abs_diff_max\":"<<maxdr<<",\"diagnostic_sign_mismatch_count\":"<<diag_sm<<"}\n";
+#ifdef PFQMC_TEST_FORCE_ZERO_AVERAGE_SIGN
+ ss=0.0;
+#endif
+ const bool sign_resolved=std::abs(ss)>=1e-12;
+ const double unresolved=std::numeric_limits<double>::quiet_NaN();
+ for(int b=0;b<nb;++b)if(bn[b]){
+  brs.push_back(bs[b]/bn[b]);
+  if(std::abs(bs[b])<=1e-12)continue;
+  double pb=bp[b]/bs[b],db=bd[b]/bs[b];
+  if(!std::isfinite(pb)||!std::isfinite(db)||std::abs(pb)<1e-14)continue;
+  brp.push_back(pb);brd.push_back(db);brr.push_back(1-db/pb);
+ }
+ const double p=sign_resolved?sp/ss:unresolved,d=sign_resolved?sd/ss:unresolved;
+ const bool observable_resolved=sign_resolved&&std::isfinite(p)&&std::isfinite(d)&&
+                                std::abs(p)>=1e-14&&brp.size()>=2;
+ const double r=observable_resolved?1-d/p:unresolved;
+ const char* observable_status=observable_resolved?"resolved":
+  (sign_resolved?"unresolved_insufficient_sign_reweighted_bins":
+                 "unresolved_zero_average_sign");
+ const double run=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
+ const double gf=q.proposal_attempt_count?double(q.pre_decision_rebuild_count)/q.proposal_attempt_count:0;
+ std::cout<<std::setprecision(17)<<"{\"status\":\"complete\",\"mode\":\"static_note_projector\",\"L\":"<<a.L<<",\"theta\":"<<a.theta<<",\"beta_trial\":"<<a.beta<<",\"dt\":"<<a.dt<<",\"V\":"<<a.V<<",\"delta\":"<<a.delta<<",\"mu\":"<<a.mu<<",\"boundary\":"<<a.boundary<<",\"hs_scheme\":"<<a.hs<<",\"seed\":"<<a.seed<<",\"burn\":"<<a.burn<<",\"measurements\":"<<a.measurements<<",\"physical_slices\":"<<ns<<",\"trial_slices\":"<<w.ntrial<<",\"observable_convention\":\"physical_density_SQ_equals_minus_legacy_contact_already_included\",\"sign_reweighted_observables_status\":\""<<observable_status<<"\",\"S_pi\":";
+ projectorJsonNumber(std::cout,p,observable_resolved);
+ std::cout<<",\"S_pi_err\":";projectorJsonNumber(std::cout,se(brp),observable_resolved);
+ std::cout<<",\"S_pi_dq\":";projectorJsonNumber(std::cout,d,observable_resolved);
+ std::cout<<",\"S_pi_dq_err\":";projectorJsonNumber(std::cout,se(brd),observable_resolved);
+ std::cout<<",\"R_cdw\":";projectorJsonNumber(std::cout,r,observable_resolved);
+ std::cout<<",\"R_cdw_err\":";projectorJsonNumber(std::cout,se(brr),observable_resolved);
+ std::cout<<",\"average_sign\":";projectorJsonNumber(std::cout,ss/a.measurements);
+ std::cout<<",\"average_sign_err\":";projectorJsonNumber(std::cout,se(brs));
+ std::cout<<",\"acceptance\":";projectorJsonNumber(std::cout,double(accepted)/attempted);
+ std::cout<<",\"runtime_seconds\":";projectorJsonNumber(std::cout,run);
+ std::cout<<",\"negative_signs\":"<<neg<<",\"sign_recomputes\":"<<recomp<<",\"sign_corrections\":"<<corr<<",\"max_sign_imag\":";
+ projectorJsonNumber(std::cout,maxsi);
+ std::cout<<",\"max_observable_imag\":";projectorJsonNumber(std::cout,maxoi);
+ std::cout<<",\"adaptive_guard\":false,\"guard_threshold\":"<<guard_threshold<<",\"proposal_attempt_count\":"<<q.proposal_attempt_count<<",\"min_update_denominator\":";
+ projectorJsonNumber(std::cout,q.min_update_denominator);
+ std::cout<<",\"guard_trigger_fraction\":";projectorJsonNumber(std::cout,gf);
+ std::cout<<",\"adaptive_rebuild_count\":"<<q.adaptive_rebuild_count<<",\"pre_decision_rebuild_count\":"<<q.pre_decision_rebuild_count<<",\"post_accept_rebuild_count\":"<<q.post_accept_rebuild_count<<",\"full_rebuild_count\":"<<q.adaptive_rebuild_count<<",\"multiprecision_fallback\":false,\"multiprecision_fallback_count\":"<<q.multiprecision_fallback_count<<",\"diagnostic_stride\":"<<a.diag_stride<<",\"diagnostic_comparisons\":"<<diag_n<<",\"diagnostic_relative_frobenius_max\":";
+ projectorJsonNumber(std::cout,maxgf,diag_n>0);
+ std::cout<<",\"diagnostic_S_pi_abs_diff_max\":";projectorJsonNumber(std::cout,maxdp,diag_n>0);
+ std::cout<<",\"diagnostic_R_cdw_abs_diff_max\":";projectorJsonNumber(std::cout,maxdr,diag_n>0);
+ std::cout<<",\"diagnostic_sign_mismatch_count\":"<<diag_sm;
+ projectorJsonBuildProvenance(std::cout,q);
+ std::cout<<"}\n";
  return 0;
 }catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 2;}

@@ -9,6 +9,7 @@
 #include "kitaevChain.h"
 #include "pfqmc.h"
 #include "projector_contour.h"
+#include "projector_json.h"
 
 namespace {
 struct Args { int L, boundary, hs_scheme, seed, burn, measurements, threads; double theta, beta_trial, dt, V, delta, mu; };
@@ -50,10 +51,6 @@ double blocking_stderr(const std::vector<double>& x) {
     double mean=0.0; for(double v:x) mean+=v; mean/=x.size();
     double ss=0.0; for(double v:x) ss+=(v-mean)*(v-mean);
     return std::sqrt(ss/(double(x.size())*double(x.size()-1)));
-}
-void json_number(std::ostream &out,double value,bool resolved) {
-    if(resolved && std::isfinite(value)) out<<value;
-    else out<<"null";
 }
 }
 
@@ -120,7 +117,7 @@ int main(int argc, char **argv) try {
     const double r_err=observable_resolved?blocking_stderr(r_bins):unresolved;
     const double sign_mean=sign_sum/a.measurements,sign_err=blocking_stderr(sign_bins);
     double runtime=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
-    std::cout<<std::setprecision(17)<<"{\"mode\":\"projector\",\"L\":"<<a.L<<",\"theta\":"<<a.theta
+    std::cout<<std::setprecision(17)<<"{\"status\":\"complete\",\"mode\":\"projector\",\"L\":"<<a.L<<",\"theta\":"<<a.theta
       <<",\"beta_trial\":"<<a.beta_trial<<",\"dt\":"<<a.dt<<",\"V\":"<<a.V<<",\"delta\":"<<a.delta
       <<",\"mu\":"<<a.mu<<",\"boundary\":"<<a.boundary<<",\"hs_scheme\":"<<a.hs_scheme<<",\"seed\":"<<a.seed
       <<",\"burn\":"<<a.burn<<",\"measurements\":"<<a.measurements<<",\"threads\":"<<a.threads
@@ -130,24 +127,31 @@ int main(int argc, char **argv) try {
       <<",\"error_method\":\"contiguous_sign_reweighted_bins\",\"n_bins\":"<<n_bins
       <<",\"onsite_contact\":"<<onsite_contact<<",\"onsite_contact_is_diagnostic_only\":true"
       <<",\"sign_reweighted_observables_status\":\""<<observable_status<<"\""
-      <<",\"S_pi_offsite\":"; json_number(std::cout,spi_offsite,observable_resolved);
-    std::cout<<",\"S_pi_offsite_mean\":"; json_number(std::cout,spi_offsite,observable_resolved);
-    std::cout<<",\"S_pi_offsite_err\":"; json_number(std::cout,spi_offsite_err,observable_resolved);
-    std::cout<<",\"S_pi_dq_offsite\":"; json_number(std::cout,spidq_offsite,observable_resolved);
-    std::cout<<",\"S_pi_dq_offsite_mean\":"; json_number(std::cout,spidq_offsite,observable_resolved);
-    std::cout<<",\"S_pi_dq_offsite_err\":"; json_number(std::cout,spidq_offsite_err,observable_resolved);
-    std::cout<<",\"S_pi\":"; json_number(std::cout,spi,observable_resolved);
-    std::cout<<",\"S_pi_mean\":"; json_number(std::cout,spi,observable_resolved);
-    std::cout<<",\"S_pi_err\":"; json_number(std::cout,spi_err,observable_resolved);
-    std::cout<<",\"S_pi_dq\":"; json_number(std::cout,spidq,observable_resolved);
-    std::cout<<",\"S_pi_dq_mean\":"; json_number(std::cout,spidq,observable_resolved);
-    std::cout<<",\"S_pi_dq_err\":"; json_number(std::cout,spidq_err,observable_resolved);
-    std::cout<<",\"R_cdw\":"; json_number(std::cout,r,observable_resolved);
-    std::cout<<",\"R_cdw_mean\":"; json_number(std::cout,r,observable_resolved);
-    std::cout<<",\"R_cdw_err\":"; json_number(std::cout,r_err,observable_resolved);
-    std::cout<<",\"average_sign\":"<<sign_mean<<",\"average_sign_mean\":"<<sign_mean<<",\"average_sign_err\":"<<sign_err
-      <<",\"acceptance\":"<<double(accepted)/attempted<<",\"runtime_seconds\":"<<runtime
+      <<",\"S_pi_offsite\":"; projectorJsonNumber(std::cout,spi_offsite,observable_resolved);
+    std::cout<<",\"S_pi_offsite_mean\":"; projectorJsonNumber(std::cout,spi_offsite,observable_resolved);
+    std::cout<<",\"S_pi_offsite_err\":"; projectorJsonNumber(std::cout,spi_offsite_err,observable_resolved);
+    std::cout<<",\"S_pi_dq_offsite\":"; projectorJsonNumber(std::cout,spidq_offsite,observable_resolved);
+    std::cout<<",\"S_pi_dq_offsite_mean\":"; projectorJsonNumber(std::cout,spidq_offsite,observable_resolved);
+    std::cout<<",\"S_pi_dq_offsite_err\":"; projectorJsonNumber(std::cout,spidq_offsite_err,observable_resolved);
+    std::cout<<",\"S_pi\":"; projectorJsonNumber(std::cout,spi,observable_resolved);
+    std::cout<<",\"S_pi_mean\":"; projectorJsonNumber(std::cout,spi,observable_resolved);
+    std::cout<<",\"S_pi_err\":"; projectorJsonNumber(std::cout,spi_err,observable_resolved);
+    std::cout<<",\"S_pi_dq\":"; projectorJsonNumber(std::cout,spidq,observable_resolved);
+    std::cout<<",\"S_pi_dq_mean\":"; projectorJsonNumber(std::cout,spidq,observable_resolved);
+    std::cout<<",\"S_pi_dq_err\":"; projectorJsonNumber(std::cout,spidq_err,observable_resolved);
+    std::cout<<",\"R_cdw\":"; projectorJsonNumber(std::cout,r,observable_resolved);
+    std::cout<<",\"R_cdw_mean\":"; projectorJsonNumber(std::cout,r,observable_resolved);
+    std::cout<<",\"R_cdw_err\":"; projectorJsonNumber(std::cout,r_err,observable_resolved);
+    std::cout<<",\"average_sign\":"; projectorJsonNumber(std::cout,sign_mean);
+    std::cout<<",\"average_sign_mean\":"; projectorJsonNumber(std::cout,sign_mean);
+    std::cout<<",\"average_sign_err\":"; projectorJsonNumber(std::cout,sign_err);
+    std::cout<<",\"acceptance\":"; projectorJsonNumber(std::cout,double(accepted)/attempted);
+    std::cout<<",\"runtime_seconds\":"; projectorJsonNumber(std::cout,runtime);
+    std::cout
       <<",\"negative_signs\":"<<negatives<<",\"sign_recomputes\":"<<recomputes<<",\"sign_corrections\":"<<corrections
-      <<",\"max_sign_imag\":"<<max_si<<",\"max_observable_imag\":"<<max_oi<<"}\n";
+      <<",\"max_sign_imag\":"; projectorJsonNumber(std::cout,max_si);
+    std::cout<<",\"max_observable_imag\":"; projectorJsonNumber(std::cout,max_oi);
+    projectorJsonBuildProvenance(std::cout,qmc);
+    std::cout<<"}\n";
     return 0;
 } catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 2;}

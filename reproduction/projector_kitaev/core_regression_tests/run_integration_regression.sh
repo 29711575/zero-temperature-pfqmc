@@ -17,6 +17,14 @@ mkdir -p "$out"
 "$bin/udt_guard_stress" "$out/udt_guard.csv" >"$out/udt_guard.json"
 "$bin/reality_symmetry" 4 2 890004 2 "$out/reality.csv" >"$out/reality.json"
 "$bin/projector_zero_sign" 6 2 2 .1 2 1 0 0 0 750006 1 2 1 >"$out/zero_sign.json"
+common_projector=(6 2 2 .1 2 1 0 0 0 750006 1 2 1)
+"$bin/projector_bins" "${common_projector[@]}" "$out/bins_raw.csv" 1 >"$out/bins.json"
+"$bin/projector_bins_zero_sign" "${common_projector[@]}" "$out/bins_zero_raw.csv" 1 >"$out/bins_zero_sign.json"
+"$bin/static_guard" "${common_projector[@]}" "$out/static_guard_raw.csv" 1 >"$out/static_guard.json"
+"$bin/static_guard_zero_sign" "${common_projector[@]}" "$out/static_guard_zero_raw.csv" 1 >"$out/static_guard_zero_sign.json"
+cmp "$out/bins_raw.csv" "$out/bins_zero_raw.csv"
+cmp "$out/static_guard_raw.csv" "$out/static_guard_zero_raw.csv"
+cmp "$out/bins_raw.csv" "$out/static_guard_raw.csv"
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 PYTHON3=${PYTHON3:-python3}
 if command -v "$PYTHON3" >/dev/null 2>&1; then
@@ -27,3 +35,7 @@ else
   printf 'SKIP: set PYTHON3 to a Python 3 environment with NumPy/SciPy\n' \
     >"$out/same_contour_ed.skip.txt"
 fi
+JSON_PYTHON=${JSON_PYTHON:-$PYTHON3}
+"$JSON_PYTHON" "$root/reproduction/projector_kitaev/core_regression_tests/validate_json_schema.py" "$out"/*.json
+"$JSON_PYTHON" "$root/reproduction/projector_kitaev/core_regression_tests/validate_json_schema.py" --zero \
+  "$out/zero_sign.json" "$out/bins_zero_sign.json" "$out/static_guard_zero_sign.json"

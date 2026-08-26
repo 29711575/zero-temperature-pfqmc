@@ -10,6 +10,7 @@
 #include "kitaevChain.h"
 #include "pfqmc.h"
 #include "projector_contour.h"
+#include "projector_json.h"
 
 namespace {
 struct Args { int L,boundary,hs,seed,burn,measurements,threads,diag_stride,stb,guard,sign_stride; double theta,beta,dt,V,delta,mu; std::string csv; };
@@ -50,6 +51,22 @@ int main(int argc,char**argv)try{
  for(int b=0;b<nb;++b)if(bn[b]&&std::abs(bs[b])>1e-12){double p=bp[b]/bs[b],d=bd[b]/bs[b];brs.push_back(bs[b]/bn[b]);brp.push_back(p);brd.push_back(d);brr.push_back(1-d/p);}
  double p=sp/ss,d=sd/ss,r=1-d/p,run=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();double gf=q.proposal_attempt_count?double(q.pre_decision_rebuild_count)/q.proposal_attempt_count:0;
  const ScaleSafeQRGuardDiagnostics &udt=scaleSafeQRGuardDiagnostics();
- std::cout<<std::setprecision(17)<<"{\"mode\":\"static_regression_projector\",\"L\":"<<a.L<<",\"theta\":"<<a.theta<<",\"beta_trial\":"<<a.beta<<",\"dt\":"<<a.dt<<",\"V\":"<<a.V<<",\"delta\":"<<a.delta<<",\"mu\":"<<a.mu<<",\"boundary\":"<<a.boundary<<",\"hs_scheme\":"<<a.hs<<",\"seed\":"<<a.seed<<",\"burn\":"<<a.burn<<",\"measurements\":"<<a.measurements<<",\"stabilization_interval\":"<<a.stb<<",\"sign_recompute_stride\":"<<a.sign_stride<<",\"physical_slices\":"<<ns<<",\"trial_slices\":"<<w.ntrial<<",\"center_green_norm_first\":"<<center_green_norm<<",\"S_pi\":"<<p<<",\"S_pi_dq\":"<<d<<",\"R_cdw\":"<<r<<",\"average_sign\":"<<ss/a.measurements<<",\"acceptance\":"<<double(accepted)/attempted<<",\"runtime_seconds\":"<<run<<",\"sign_corrections\":"<<corr<<",\"max_sign_imag\":"<<maxsi<<",\"max_observable_imag\":"<<maxoi<<",\"diagnostic_comparisons\":"<<diag_n<<",\"diagnostic_relative_frobenius_max\":"<<maxgf<<",\"diagnostic_sign_mismatch_count\":"<<diag_sm<<",\"udt_guard_bits\":"<<scaleSafeUDTRankLossGuardBits<<",\"udt_orth_precheck_bits\":"<<scaleSafeUDTOrthogonalityPrecheckBits<<",\"udt_guard_triggers\":"<<udt.trigger_count<<",\"udt_max_lost_bits\":"<<udt.max_lost_bits<<",\"udt_min_guard_margin\":"<<udt.min_guard_margin<<"}\n";
+ std::cout<<std::setprecision(17)<<"{\"status\":\"complete\",\"mode\":\"static_regression_projector\",\"L\":"<<a.L<<",\"theta\":"<<a.theta<<",\"beta_trial\":"<<a.beta<<",\"dt\":"<<a.dt<<",\"V\":"<<a.V<<",\"delta\":"<<a.delta<<",\"mu\":"<<a.mu<<",\"boundary\":"<<a.boundary<<",\"hs_scheme\":"<<a.hs<<",\"seed\":"<<a.seed<<",\"burn\":"<<a.burn<<",\"measurements\":"<<a.measurements<<",\"stabilization_interval\":"<<a.stb<<",\"sign_recompute_stride\":"<<a.sign_stride<<",\"physical_slices\":"<<ns<<",\"trial_slices\":"<<w.ntrial<<",\"center_green_norm_first\":";
+ projectorJsonNumber(std::cout,center_green_norm);
+ std::cout<<",\"S_pi\":";projectorJsonNumber(std::cout,p);
+ std::cout<<",\"S_pi_dq\":";projectorJsonNumber(std::cout,d);
+ std::cout<<",\"R_cdw\":";projectorJsonNumber(std::cout,r);
+ std::cout<<",\"average_sign\":";projectorJsonNumber(std::cout,ss/a.measurements);
+ std::cout<<",\"acceptance\":";projectorJsonNumber(std::cout,double(accepted)/attempted);
+ std::cout<<",\"runtime_seconds\":";projectorJsonNumber(std::cout,run);
+ std::cout<<",\"sign_corrections\":"<<corr<<",\"max_sign_imag\":";projectorJsonNumber(std::cout,maxsi);
+ std::cout<<",\"max_observable_imag\":";projectorJsonNumber(std::cout,maxoi);
+ std::cout<<",\"diagnostic_comparisons\":"<<diag_n<<",\"diagnostic_relative_frobenius_max\":";
+ projectorJsonNumber(std::cout,maxgf,diag_n>0);
+ std::cout<<",\"diagnostic_sign_mismatch_count\":"<<diag_sm<<",\"udt_guard_bits\":"<<scaleSafeUDTRankLossGuardBits<<",\"udt_orth_precheck_bits\":"<<scaleSafeUDTOrthogonalityPrecheckBits<<",\"udt_guard_triggers\":"<<udt.trigger_count<<",\"udt_max_lost_bits\":";
+ projectorJsonNumber(std::cout,udt.max_lost_bits);
+ std::cout<<",\"udt_min_guard_margin\":";projectorJsonNumber(std::cout,udt.min_guard_margin);
+ projectorJsonBuildProvenance(std::cout,q);
+ std::cout<<"}\n";
  return 0;
 }catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 2;}
