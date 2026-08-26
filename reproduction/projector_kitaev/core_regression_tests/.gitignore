@@ -1,0 +1,8 @@
+/bin/
+/build/
+/outputs/
+/results/
+/__pycache__/
+*.o[0-9]*
+*.e[0-9]*
+local_update_min_repro.txt
