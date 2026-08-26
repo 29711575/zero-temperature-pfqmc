@@ -294,7 +294,7 @@ int main(int argc, char **argv) try {
             threshold = std::stod(value);
         }
         qmc.configureMultiprecisionFallback(
-            true, threshold, [&config, &walker](int boundary, MatType &out) {
+            multiprecisionEnabled, threshold, [&config, &walker](int boundary, MatType &out) {
                 return driven_multiprecision::rebuild(
                     config, walker.op_array, boundary, walker.n_trial, out);
             });
@@ -391,10 +391,10 @@ int main(int argc, char **argv) try {
     for (int sample = 0; sample < args.measurements; ++sample) {
         currentDiagnosticSample = sample;
         if (sample % kSignRecomputeStride == 0) {
-            const DataType raw = qmc.getSignRaw();
+            const PfaffianResult raw = qmc.getSignRawWithStatus();
             ++signRecomputes;
-            if (std::abs(qmc.sign - raw) > kSignCorrectionTolerance) {
-                qmc.sign = raw.real() >= 0 ? DataType(1, 0) : DataType(-1, 0);
+            if (raw.ok() &&
+                (qmc.sign.real() >= 0) != (raw.value.real() >= 0)) {
                 ++signCorrections;
             }
         }

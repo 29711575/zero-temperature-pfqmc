@@ -4,7 +4,20 @@
 // entirely on MKL/BLAS dense matrix utilities
 
 #include"skewMatUtils.h"
+#include <cmath>
 #include <fstream>
+#include <stdexcept>
+
+const char *pfaffianStatusName(PfaffianStatus status) {
+    switch (status) {
+    case PfaffianStatus::success: return "success";
+    case PfaffianStatus::invalid_dimension: return "invalid_dimension";
+    case PfaffianStatus::lapack_failure: return "lapack_failure";
+    case PfaffianStatus::zero_pivot: return "zero_pivot";
+    case PfaffianStatus::nonfinite_pivot: return "nonfinite_pivot";
+    }
+    return "unknown";
+}
 
 // after the Householder transformation
 // A is brought into tri-diagonalized form
@@ -116,23 +129,49 @@ DataType pfaf_Householder(const int N, MatType& A) {
     return r;
 }
 
-DataType pfaf(const int N, MatType& A) {
-    DataType r = 1;
-    int ipiv[2*N];
-    int m = sktrf(2*N, A.data(), ipiv, "U", "P");
-    if (m < 0) {
-        std::cout << "sktrf exit with error = " << m << "\n";
-        return 1.0;
+PfaffianResult pfafWithStatus(const int N, MatType& A) {
+    PfaffianResult result;
+    if (N <= 0 || A.rows() != 2*N || A.cols() != 2*N) return result;
+    result.status = PfaffianStatus::success;
+    result.value = DataType(1.0, 0.0);
+    std::vector<int> ipiv(2*N);
+    result.lapack_info = sktrf(2*N, A.data(), ipiv.data(), "U", "P");
+    if (result.lapack_info != 0) {
+        result.status = PfaffianStatus::lapack_failure;
+        result.value = DataType(0.0, 0.0);
+        return result;
     }
     // std::cout << "A = " << A << "=====\n\n";
     // for(int i=0; i<2*N; i++) std::cout << ipiv[i] << " ";
     // std::cout << "\n";
     for(int i=0; i<2*N; i+=2) {
-        r *= A(i, i+1);
+        const DataType pivot = A(i, i+1);
+        const double magnitude = std::abs(pivot);
+        result.min_pivot = std::min(result.min_pivot, magnitude);
+        if (!std::isfinite(pivot.real()) || !std::isfinite(pivot.imag()) ||
+            !std::isfinite(magnitude)) {
+            result.status = PfaffianStatus::nonfinite_pivot;
+            result.value = DataType(0.0, 0.0);
+            return result;
+        }
+        if (magnitude == 0.0) {
+            result.status = PfaffianStatus::zero_pivot;
+            result.value = DataType(0.0, 0.0);
+            return result;
+        }
+        result.value *= pivot;
         // std::cout << "Ai i+1 = " << A(i, i+1) << " ";
-        if (ipiv[i] != (i+1)) r = -r;
+        if (ipiv[i] != (i+1)) result.value = -result.value;
     }
-    return r;
+    return result;
+}
+
+DataType pfaf(const int N, MatType& A) {
+    const PfaffianResult result = pfafWithStatus(N, A);
+    if (!result.ok()) throw std::runtime_error(
+        std::string("Pfaffian factorization failed: ") +
+        pfaffianStatusName(result.status));
+    return result.value;
 }
 
 DataType signOfPfaf_Householder(MatType& A) {
@@ -150,25 +189,47 @@ DataType signOfPfaf_Householder(MatType& A) {
     return r;
 }
 
-DataType signOfPfaf(MatType& A) {
+PfaffianResult signOfPfafWithStatus(MatType& A) {
     const int L = A.cols();
-    DataType r = 1.0;
-    DataType tmp;
-    int ipiv[L];
-    // cVecType temp(4*N);
-    // MatType B = A;
-    int m = sktrf(L, A.data(), ipiv, "U", "P");
-    if (m < 0) {
-        std::cout << "sktrf exit with error = " << m << "\n";
-        return 1.0;
+    PfaffianResult result;
+    if (L <= 0 || (L % 2) != 0 || A.rows() != L) return result;
+    result.status = PfaffianStatus::success;
+    result.value = DataType(1.0, 0.0);
+    std::vector<int> ipiv(L);
+    result.lapack_info = sktrf(L, A.data(), ipiv.data(), "U", "P");
+    if (result.lapack_info != 0) {
+        result.status = PfaffianStatus::lapack_failure;
+        result.value = DataType(0.0, 0.0);
+        return result;
     }
 
     for(int i=0; i<L; i+=2) {
-        tmp = A(i, i+1);
-        r *= tmp / std::abs(tmp);
-        if (ipiv[i] != (i+1)) r = -r;
+        const DataType pivot = A(i, i+1);
+        const double magnitude = std::abs(pivot);
+        result.min_pivot = std::min(result.min_pivot, magnitude);
+        if (!std::isfinite(pivot.real()) || !std::isfinite(pivot.imag()) ||
+            !std::isfinite(magnitude)) {
+            result.status = PfaffianStatus::nonfinite_pivot;
+            result.value = DataType(0.0, 0.0);
+            return result;
+        }
+        if (magnitude == 0.0) {
+            result.status = PfaffianStatus::zero_pivot;
+            result.value = DataType(0.0, 0.0);
+            return result;
+        }
+        result.value *= pivot / magnitude;
+        if (ipiv[i] != (i+1)) result.value = -result.value;
     }
-    return r;
+    return result;
+}
+
+DataType signOfPfaf(MatType& A) {
+    const PfaffianResult result = signOfPfafWithStatus(A);
+    if (!result.ok()) throw std::runtime_error(
+        std::string("Pfaffian sign factorization failed: ") +
+        pfaffianStatusName(result.status));
+    return result.value;
 }
 
 
@@ -220,7 +281,8 @@ void generateMatForEta(const MatType& H, MatType& A) {
     return r;
 }
 
-DataType pfaffianForSignOfProduct(const MatType &G1, const MatType &G2/*, bool diagno*/) {
+PfaffianResult pfaffianForSignOfProductWithStatus(const MatType &G1,
+                                                  const MatType &G2) {
     int n = G1.cols() / 2;
     MatType A = MatType::Zero(4*n, 4*n);
     A.block(0, 0, 2*n, 2*n) = G1;
@@ -230,7 +292,15 @@ DataType pfaffianForSignOfProduct(const MatType &G1, const MatType &G2/*, bool d
     
     // MatType Acopy = A;
 
-    DataType r = signOfPfaf(A);
+    return signOfPfafWithStatus(A);
+}
+
+DataType pfaffianForSignOfProduct(const MatType &G1, const MatType &G2/*, bool diagno*/) {
+    const PfaffianResult result = pfaffianForSignOfProductWithStatus(G1, G2);
+    if (!result.ok()) throw std::runtime_error(
+        std::string("Pfaffian product sign failed: ") +
+        pfaffianStatusName(result.status));
+    DataType r = result.value;
 
     // if (diagno) {
     //     if (std::abs(r.real()) < 0.99 ) {

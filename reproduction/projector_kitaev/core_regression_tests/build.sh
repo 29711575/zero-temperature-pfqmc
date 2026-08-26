@@ -20,6 +20,7 @@ build_core local_update_property local_update_property_driver.cpp
 build_core right_boundary_green right_boundary_green_driver.cpp
 build_core left_green_recovery left_green_recovery_driver.cpp
 build_core reality_symmetry reality_symmetry_driver.cpp
+build_core sign_interface_hardening sign_interface_hardening_driver.cpp
 build_header udt_stress udt_stress_driver.cpp
 build_header udt_guard_stress udt_guard_stress_driver.cpp
 "$CXX" "${common[@]}" \

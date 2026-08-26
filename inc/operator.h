@@ -54,6 +54,7 @@ public:
     MatType g0;
     MatType g0_inv;
     DataType signPf_g0_inv;
+    PfaffianResult signPf_g0_inv_result;
     DataType signOfWeight;
     DenseOperator(const MatType &mat_, DataType _s)
     {
@@ -71,7 +72,15 @@ public:
         g0_inv = g0.inverse();
         // std::cout << g0_inv << "===g0_inv======= \n\n";
         MatType tmp = g0_inv;
-        signPf_g0_inv = signOfPfaf(tmp);
+        // This legacy cache is not used by the current propagation/sign path.
+        // In particular, g0_inv can be singular for otherwise valid dense
+        // contour operators.  Preserve that fact as an unavailable status
+        // instead of either fabricating +1 or making construction throw.
+        signPf_g0_inv_result = signOfPfafWithStatus(tmp);
+        signPf_g0_inv = signPf_g0_inv_result.ok()
+            ? signPf_g0_inv_result.value
+            : DataType(std::numeric_limits<double>::quiet_NaN(),
+                       std::numeric_limits<double>::quiet_NaN());
         // std::cout << g0_inv << "g0_inv \n";
     }
 

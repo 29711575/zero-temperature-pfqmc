@@ -61,7 +61,13 @@ PfQMC::PfQMC(Spinless_tV *walker, int _stb)
     udtR = std::vector<UDT>(checkpoints);
     leftInit();
     rightInit();
-    sign = getSignRaw();
+    const PfaffianResult initialSign = getSignRawWithStatus();
+    if (!initialSign.ok()) {
+        throw std::runtime_error(
+            std::string("initial raw sign unavailable: ") +
+            pfaffianStatusName(initialSign.status));
+    }
+    sign = initialSign.value;
 }
 
 void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
@@ -310,14 +316,17 @@ void PfQMC::leftSweep()
     }
 }
 
-DataType PfQMC::getSignRaw()
+PfaffianResult PfQMC::getSignRawWithStatus()
 {
     const MatType identity = MatType::Identity(nDim, nDim);
     const DataType extraSign = ((nDim / 2) % 2 == 0) ? 1.0 : -1.0;
     UDT A(nDim);
     op_array[0]->stabilizedLeftMultiply(A);
     MatType gNext, gCur;
-    DataType signCur, signNext, signPfaf;
+    DataType signCur, signNext;
+    PfaffianResult result;
+    result.status = PfaffianStatus::success;
+    result.value = DataType(1.0, 0.0);
     signCur = op_array[0]->getSignOfWeight();
     A.onePlusInv(gCur);
     gCur -= identity;
@@ -327,9 +336,17 @@ DataType PfQMC::getSignRaw()
         signNext = op_array[i]->getSignOfWeight();
         // std::cout << gNext << "==== gnext ====\n \n";
         // std::cout << gCur << "==== gcur ====\n \n";
-        signPfaf = pfaffianForSignOfProduct(gNext, gCur);
+        const PfaffianResult pfaffian =
+            pfaffianForSignOfProductWithStatus(gNext, gCur);
+        result.min_pivot = std::min(result.min_pivot, pfaffian.min_pivot);
+        if (!pfaffian.ok()) {
+            result.status = pfaffian.status;
+            result.lapack_info = pfaffian.lapack_info;
+            result.value = DataType(0.0, 0.0);
+            return result;
+        }
         // std::cout << "Raw sCur, sNext, sPfaf=" << signCur << " " << signNext << " " << signPfaf << "\n"; 
-        signCur = (signCur * signNext * signPfaf * extraSign);
+        signCur = (signCur * signNext * pfaffian.value * extraSign);
 
         // std::cout << signCur << " sign cur\n";
         if (i == op_length - 1)
@@ -376,7 +393,23 @@ DataType PfQMC::getSignRaw()
         //     myfile.close();
         // }
     }
-    return signCur;
+    result.value = signCur;
+    if (!std::isfinite(signCur.real()) || !std::isfinite(signCur.imag())) {
+        result.status = PfaffianStatus::nonfinite_pivot;
+        result.value = DataType(0.0, 0.0);
+    }
+    return result;
+}
+
+DataType PfQMC::getSignRaw()
+{
+    const PfaffianResult result = getSignRawWithStatus();
+    if (!result.ok()) {
+        throw std::runtime_error(
+            std::string("raw Pfaffian sign unavailable: ") +
+            pfaffianStatusName(result.status));
+    }
+    return result.value;
 }
 
 // DataType PfQMC::getSign() {

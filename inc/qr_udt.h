@@ -57,6 +57,39 @@ struct ScaleSafeQRGuardDiagnostics
     double last_orthogonality_residual = 0.0;
 };
 
+struct QRDiagonalPhaseDiagnostics
+{
+    long long samples = 0;
+    long long above_1e12 = 0;
+    long long nonfinite = 0;
+    double maximum = 0.0;
+    double sum = 0.0;
+};
+
+inline QRDiagonalPhaseDiagnostics &qrDiagonalPhaseDiagnostics()
+{
+    static QRDiagonalPhaseDiagnostics diagnostics;
+    return diagnostics;
+}
+
+inline void resetQRDiagonalPhaseDiagnostics()
+{
+    qrDiagonalPhaseDiagnostics() = QRDiagonalPhaseDiagnostics();
+}
+
+inline void recordQRDiagonalPhase(const DataType &diagonal)
+{
+    QRDiagonalPhaseDiagnostics &diagnostics = qrDiagonalPhaseDiagnostics();
+    ++diagnostics.samples;
+    const double denominator = std::max(
+        std::abs(diagonal.real()), std::numeric_limits<double>::min());
+    const double ratio = std::abs(diagonal.imag())/denominator;
+    if (!std::isfinite(ratio)) { ++diagnostics.nonfinite; return; }
+    diagnostics.maximum = std::max(diagnostics.maximum, ratio);
+    diagnostics.sum += ratio;
+    if (ratio > 1e-12) ++diagnostics.above_1e12;
+}
+
 inline ScaleSafeQRGuardDiagnostics &scaleSafeQRGuardDiagnostics()
 {
     static ScaleSafeQRGuardDiagnostics diagnostics;
@@ -219,6 +252,7 @@ public:
         lapack_int info=LAPACKE_zgeqp3(LAPACK_COL_MAJOR,nDim,nDim,A.data(),nDim,jpvt.data(),tau.data());
         if(info!=0) throw std::runtime_error("scale-safe zgeqp3 info="+std::to_string(info));
         for(int i=0;i<nDim;++i) {
+            recordQRDiagonalPhase(A(i,i));
             const double diag=std::abs(A(i,i).real());
             setActualD(i,diag);
             const double inv=1.0/diag;
