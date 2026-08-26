@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 #include "kitaevChain.h"
@@ -50,6 +51,10 @@ double blocking_stderr(const std::vector<double>& x) {
     double ss=0.0; for(double v:x) ss+=(v-mean)*(v-mean);
     return std::sqrt(ss/(double(x.size())*double(x.size()-1)));
 }
+void json_number(std::ostream &out,double value,bool resolved) {
+    if(resolved && std::isfinite(value)) out<<value;
+    else out<<"null";
+}
 }
 
 int main(int argc, char **argv) try {
@@ -80,13 +85,18 @@ int main(int argc, char **argv) try {
         before.swap(after); qmc.leftSweep(); after=fields(walker);
         accepted+=changes(before,after); attempted+=before.size();
     }
-    if(std::abs(sign_sum)<1e-12) return 4;
+#ifdef PFQMC_TEST_FORCE_ZERO_AVERAGE_SIGN
+    // Output-layer integration test hook. It is absent from production builds.
+    sign_sum=0.0;
+#endif
+    const bool sign_reweighted_resolved=std::abs(sign_sum)>=1e-12;
     // PfQMC::g has unit diagonal, so legacy already contains the negative
     // onsite contact.  Only flip the overall sign; do not add contact again.
     const double onsite_contact=1.0/(4.0*a.L);
-    const double spi=-spi_sum/sign_sum, spidq=-spidq_sum/sign_sum;
+    const double unresolved=std::numeric_limits<double>::quiet_NaN();
+    const double spi=sign_reweighted_resolved?-spi_sum/sign_sum:unresolved;
+    const double spidq=sign_reweighted_resolved?-spidq_sum/sign_sum:unresolved;
     const double spi_offsite=spi-onsite_contact, spidq_offsite=spidq-onsite_contact;
-    if(std::abs(spi)<1e-14) return 4;
     std::vector<double> spi_offsite_bins,spidq_offsite_bins,spi_bins,spidq_bins,r_bins,sign_bins;
     for(int b=0;b<n_bins;++b){
         if(bcount[b]>0) sign_bins.push_back(bsign[b]/bcount[b]);
@@ -97,10 +107,17 @@ int main(int argc, char **argv) try {
         spi_offsite_bins.push_back(xoff); spidq_offsite_bins.push_back(yoff);
         spi_bins.push_back(x); spidq_bins.push_back(y); r_bins.push_back(1.0-y/x);
     }
-    if(spi_bins.size()<2) return 4;
-    const double spi_offsite_err=blocking_stderr(spi_offsite_bins),spidq_offsite_err=blocking_stderr(spidq_offsite_bins);
-    const double spi_err=blocking_stderr(spi_bins),spidq_err=blocking_stderr(spidq_bins);
-    const double r=1.0-spidq/spi,r_err=blocking_stderr(r_bins);
+    const bool observable_resolved=sign_reweighted_resolved && std::isfinite(spi) &&
+                                   std::abs(spi)>=1e-14 && spi_bins.size()>=2;
+    const char *observable_status=observable_resolved?"resolved":
+        (sign_reweighted_resolved?"unresolved_insufficient_sign_reweighted_bins":
+                                  "unresolved_zero_average_sign");
+    const double spi_offsite_err=observable_resolved?blocking_stderr(spi_offsite_bins):unresolved;
+    const double spidq_offsite_err=observable_resolved?blocking_stderr(spidq_offsite_bins):unresolved;
+    const double spi_err=observable_resolved?blocking_stderr(spi_bins):unresolved;
+    const double spidq_err=observable_resolved?blocking_stderr(spidq_bins):unresolved;
+    const double r=observable_resolved?1.0-spidq/spi:unresolved;
+    const double r_err=observable_resolved?blocking_stderr(r_bins):unresolved;
     const double sign_mean=sign_sum/a.measurements,sign_err=blocking_stderr(sign_bins);
     double runtime=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
     std::cout<<std::setprecision(17)<<"{\"mode\":\"projector\",\"L\":"<<a.L<<",\"theta\":"<<a.theta
@@ -112,12 +129,23 @@ int main(int argc, char **argv) try {
       <<",\"observable_convention\":\"physical_density_SQ_equals_minus_legacy_contact_already_included\""
       <<",\"error_method\":\"contiguous_sign_reweighted_bins\",\"n_bins\":"<<n_bins
       <<",\"onsite_contact\":"<<onsite_contact<<",\"onsite_contact_is_diagnostic_only\":true"
-      <<",\"S_pi_offsite\":"<<spi_offsite<<",\"S_pi_offsite_mean\":"<<spi_offsite<<",\"S_pi_offsite_err\":"<<spi_offsite_err
-      <<",\"S_pi_dq_offsite\":"<<spidq_offsite<<",\"S_pi_dq_offsite_mean\":"<<spidq_offsite<<",\"S_pi_dq_offsite_err\":"<<spidq_offsite_err
-      <<",\"S_pi\":"<<spi<<",\"S_pi_mean\":"<<spi<<",\"S_pi_err\":"<<spi_err
-      <<",\"S_pi_dq\":"<<spidq<<",\"S_pi_dq_mean\":"<<spidq<<",\"S_pi_dq_err\":"<<spidq_err
-      <<",\"R_cdw\":"<<r<<",\"R_cdw_mean\":"<<r<<",\"R_cdw_err\":"<<r_err
-      <<",\"average_sign\":"<<sign_mean<<",\"average_sign_mean\":"<<sign_mean<<",\"average_sign_err\":"<<sign_err
+      <<",\"sign_reweighted_observables_status\":\""<<observable_status<<"\""
+      <<",\"S_pi_offsite\":"; json_number(std::cout,spi_offsite,observable_resolved);
+    std::cout<<",\"S_pi_offsite_mean\":"; json_number(std::cout,spi_offsite,observable_resolved);
+    std::cout<<",\"S_pi_offsite_err\":"; json_number(std::cout,spi_offsite_err,observable_resolved);
+    std::cout<<",\"S_pi_dq_offsite\":"; json_number(std::cout,spidq_offsite,observable_resolved);
+    std::cout<<",\"S_pi_dq_offsite_mean\":"; json_number(std::cout,spidq_offsite,observable_resolved);
+    std::cout<<",\"S_pi_dq_offsite_err\":"; json_number(std::cout,spidq_offsite_err,observable_resolved);
+    std::cout<<",\"S_pi\":"; json_number(std::cout,spi,observable_resolved);
+    std::cout<<",\"S_pi_mean\":"; json_number(std::cout,spi,observable_resolved);
+    std::cout<<",\"S_pi_err\":"; json_number(std::cout,spi_err,observable_resolved);
+    std::cout<<",\"S_pi_dq\":"; json_number(std::cout,spidq,observable_resolved);
+    std::cout<<",\"S_pi_dq_mean\":"; json_number(std::cout,spidq,observable_resolved);
+    std::cout<<",\"S_pi_dq_err\":"; json_number(std::cout,spidq_err,observable_resolved);
+    std::cout<<",\"R_cdw\":"; json_number(std::cout,r,observable_resolved);
+    std::cout<<",\"R_cdw_mean\":"; json_number(std::cout,r,observable_resolved);
+    std::cout<<",\"R_cdw_err\":"; json_number(std::cout,r_err,observable_resolved);
+    std::cout<<",\"average_sign\":"<<sign_mean<<",\"average_sign_mean\":"<<sign_mean<<",\"average_sign_err\":"<<sign_err
       <<",\"acceptance\":"<<double(accepted)/attempted<<",\"runtime_seconds\":"<<runtime
       <<",\"negative_signs\":"<<negatives<<",\"sign_recomputes\":"<<recomputes<<",\"sign_corrections\":"<<corrections
       <<",\"max_sign_imag\":"<<max_si<<",\"max_observable_imag\":"<<max_oi<<"}\n";
