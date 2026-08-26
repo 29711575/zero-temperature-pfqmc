@@ -3,7 +3,49 @@
 
 #include <cmath>
 #include <ostream>
+#include <string>
 #include "pfqmc.h"
+
+struct ProjectorRawSignChecks
+{
+    long long comparisons = 0;
+    long long agreement = 0;
+    long long mismatch = 0;
+    long long unavailable = 0;
+    long long untrusted = 0;
+    int last_lapack_info = 0;
+    double min_pivot = std::numeric_limits<double>::infinity();
+
+    void record(const DataType &transported, const PfaffianResult &raw,
+                double phase_tolerance = 1e-2)
+    {
+        ++comparisons;
+        min_pivot = std::min(min_pivot, raw.min_pivot);
+        if (!raw.ok()) {
+            ++unavailable;
+            last_lapack_info = raw.lapack_info;
+            return;
+        }
+        const double magnitude = std::abs(raw.value);
+        if (!std::isfinite(raw.value.real()) || !std::isfinite(raw.value.imag()) ||
+            !std::isfinite(magnitude) || magnitude == 0.0 ||
+            std::abs(magnitude-1.0) > phase_tolerance) {
+            ++untrusted;
+            return;
+        }
+        if ((transported.real() >= 0.0) == (raw.value.real() >= 0.0)) ++agreement;
+        else ++mismatch;
+    }
+
+    const char *status() const
+    {
+        if (comparisons == 0) return "not_sampled";
+        if (unavailable != 0) return "raw_check_unavailable";
+        if (untrusted != 0) return "raw_check_untrusted";
+        if (mismatch != 0) return "mismatch";
+        return "agreement";
+    }
+};
 
 inline void projectorJsonNumber(std::ostream &out, double value,
                                 bool resolved = true)
@@ -46,6 +88,22 @@ inline void projectorJsonBuildProvenance(std::ostream &out, const PfQMC &qmc)
 #else
     out << ",\"executable_sha256\":null";
 #endif
+}
+
+inline void projectorJsonRawSignChecks(std::ostream &out,
+                                       const ProjectorRawSignChecks &checks)
+{
+    out << ",\"raw_sign_check_status\":\"" << checks.status() << "\""
+        << ",\"raw_sign_check_comparisons\":" << checks.comparisons
+        << ",\"raw_sign_check_agreement\":" << checks.agreement
+        << ",\"raw_sign_check_mismatch\":" << checks.mismatch
+        << ",\"raw_sign_check_unavailable\":" << checks.unavailable
+        << ",\"raw_sign_check_untrusted\":" << checks.untrusted
+        << ",\"raw_sign_check_last_lapack_info\":"
+        << checks.last_lapack_info
+        << ",\"raw_sign_check_min_pivot\":";
+    projectorJsonNumber(out, checks.min_pivot,
+                        std::isfinite(checks.min_pivot));
 }
 
 #endif

@@ -67,9 +67,12 @@ int main(int argc, char **argv) try {
     std::vector<int> bcount(n_bins,0);
     double sign_sum=0, spi_sum=0, spidq_sum=0, max_si=0, max_oi=0;
     long long accepted=0,attempted=0; int negatives=0,recomputes=0,corrections=0;
+    ProjectorRawSignChecks rawSignChecks;
     for(int sample=0;sample<a.measurements;++sample){
-        if(sample%20==0){ DataType raw=qmc.getSignRaw(); ++recomputes;
-            if(std::abs(qmc.sign-raw)>1e-2){qmc.sign=raw.real()>=0?DataType(1,0):DataType(-1,0);++corrections;}}
+        if(sample%20==0){
+            const PfaffianResult raw=qmc.getSignRawWithStatus(); ++recomputes;
+            rawSignChecks.record(qmc.sign,raw);
+        }
         auto before=fields(walker); MatType gc; DataType sc;
         qmc.rightSweep(walker.center_boundary,&gc,&sc); auto after=fields(walker);
         accepted+=changes(before,after); attempted+=before.size();
@@ -151,6 +154,7 @@ int main(int argc, char **argv) try {
       <<",\"negative_signs\":"<<negatives<<",\"sign_recomputes\":"<<recomputes<<",\"sign_corrections\":"<<corrections
       <<",\"max_sign_imag\":"; projectorJsonNumber(std::cout,max_si);
     std::cout<<",\"max_observable_imag\":"; projectorJsonNumber(std::cout,max_oi);
+    projectorJsonRawSignChecks(std::cout,rawSignChecks);
     projectorJsonBuildProvenance(std::cout,qmc);
     std::cout<<"}\n";
     return 0;

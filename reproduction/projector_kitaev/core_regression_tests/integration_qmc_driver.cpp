@@ -37,13 +37,13 @@ int main(int argc,char**argv)try{
  for(int i=0;i<a.burn;++i){q.rightSweep();q.leftSweep();}
  std::ofstream raw(a.csv);if(!raw)throw std::runtime_error("cannot open raw CSV");
  raw<<"measurement,sign,sign_S_pi_numerator,sign_S_pi_dq_numerator,S_pi,S_pi_dq,R_cdw,acceptance,diag_relative_frobenius,diag_S_pi_abs_diff,diag_R_cdw_abs_diff,diag_sign_mismatch\n"<<std::setprecision(17);
- int nb=std::min(20,a.measurements);std::vector<double>bs(nb),bp(nb),bd(nb),brs,brp,brd,brr;std::vector<int>bn(nb);double ss=0,sp=0,sd=0,maxsi=0,maxoi=0,center_green_norm=0;long long accepted=0,attempted=0,neg=0,recomp=0,corr=0,diag_n=0,diag_sm=0;double maxgf=0,maxdp=0,maxdr=0;
+ int nb=std::min(20,a.measurements);std::vector<double>bs(nb),bp(nb),bd(nb),brs,brp,brd,brr;std::vector<int>bn(nb);double ss=0,sp=0,sd=0,maxsi=0,maxoi=0,center_green_norm=0;long long accepted=0,attempted=0,neg=0,recomp=0,corr=0,diag_n=0,diag_sm=0;double maxgf=0,maxdp=0,maxdr=0;ProjectorRawSignChecks rawChecks;
  for(int k=0;k<a.measurements;++k){
-  if(k%a.sign_stride==0){DataType z=q.getSignRaw();++recomp;if(std::abs(q.sign-z)>1e-2){q.sign=z.real()>=0?DataType(1,0):DataType(-1,0);++corr;}}
+  if(k%a.sign_stride==0){const PfaffianResult z=q.getSignRawWithStatus();++recomp;rawChecks.record(q.sign,z);}
   auto before=fields(w);MatType g;DataType sg;q.rightSweep(w.center,&g,&sg);auto after=fields(w);accepted+=changes(before,after);attempted+=before.size();
   DataType lp=cfg.StructureFactorCDW(g),ld=cfg.StructureFactorCDWOffset(g);double p=-lp.real(),d=-ld.real(),r=1-d/p,s=sg.real()>=0?1.:-1.;if(k==0)center_green_norm=g.norm();ss+=s;sp+=s*p;sd+=s*d;neg+=s<0;int b=std::min(nb-1,int((static_cast<long long>(k)*nb)/a.measurements));bs[b]+=s;bp[b]+=s*p;bd[b]+=s*d;++bn[b];maxsi=std::max(maxsi,std::abs(sg.imag()));maxoi=std::max({maxoi,std::abs(lp.imag()),std::abs(ld.imag())});
   double rel=std::numeric_limits<double>::quiet_NaN(),dp=rel,dr=rel;int sm=-1;
-  if(a.diag_stride>0&&k%a.diag_stride==0){MatType full;q.rebuildGreenFromFullContourAtBoundary(0,full);double pfast=phys_spi(cfg,q.g),dfast=phys_sdq(cfg,q.g),rfast=1-dfast/pfast,pf=phys_spi(cfg,full),df=phys_sdq(cfg,full),rf=1-df/pf;rel=(q.g-full).norm()/std::max(full.norm(),std::numeric_limits<double>::min());dp=std::abs(pfast-pf);dr=std::abs(rfast-rf);DataType sr=q.getSignRaw();sm=((q.sign.real()>=0)!=(sr.real()>=0));++diag_n;diag_sm+=sm;maxgf=std::max(maxgf,rel);maxdp=std::max(maxdp,dp);maxdr=std::max(maxdr,dr);}
+  if(a.diag_stride>0&&k%a.diag_stride==0){MatType full;q.rebuildGreenFromFullContourAtBoundary(0,full);double pfast=phys_spi(cfg,q.g),dfast=phys_sdq(cfg,q.g),rfast=1-dfast/pfast,pf=phys_spi(cfg,full),df=phys_sdq(cfg,full),rf=1-df/pf;rel=(q.g-full).norm()/std::max(full.norm(),std::numeric_limits<double>::min());dp=std::abs(pfast-pf);dr=std::abs(rfast-rf);const PfaffianResult sr=q.getSignRawWithStatus();if(sr.ok()){sm=((q.sign.real()>=0)!=(sr.value.real()>=0));diag_sm+=sm;}++diag_n;maxgf=std::max(maxgf,rel);maxdp=std::max(maxdp,dp);maxdr=std::max(maxdr,dr);}
   raw<<k<<','<<s<<','<<s*p<<','<<s*d<<','<<p<<','<<d<<','<<r<<','<<(attempted?double(accepted)/attempted:0)<<','<<rel<<','<<dp<<','<<dr<<','<<sm<<'\n';
   before.swap(after);q.leftSweep();after=fields(w);accepted+=changes(before,after);attempted+=before.size();
  }
@@ -66,6 +66,7 @@ int main(int argc,char**argv)try{
  std::cout<<",\"diagnostic_sign_mismatch_count\":"<<diag_sm<<",\"udt_guard_bits\":"<<scaleSafeUDTRankLossGuardBits<<",\"udt_orth_precheck_bits\":"<<scaleSafeUDTOrthogonalityPrecheckBits<<",\"udt_guard_triggers\":"<<udt.trigger_count<<",\"udt_max_lost_bits\":";
  projectorJsonNumber(std::cout,udt.max_lost_bits);
  std::cout<<",\"udt_min_guard_margin\":";projectorJsonNumber(std::cout,udt.min_guard_margin);
+ projectorJsonRawSignChecks(std::cout,rawChecks);
  projectorJsonBuildProvenance(std::cout,q);
  std::cout<<"}\n";
  return 0;

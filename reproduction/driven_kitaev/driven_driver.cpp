@@ -13,6 +13,7 @@
 #include "kitaevChain.h"
 #include "pfqmc.h"
 #include "../projector_kitaev/projector_contour.h"
+#include "../projector_kitaev/projector_json.h"
 #include "multiprecision_driven_rebuild.h"
 
 namespace {
@@ -292,7 +293,7 @@ int main(int argc, char **argv) try {
             threshold = std::stod(value);
         }
         qmc.configureMultiprecisionFallback(
-            true, threshold, [&config, &walker](int boundary, MatType &out) {
+            multiprecisionEnabled, threshold, [&config, &walker](int boundary, MatType &out) {
                 return driven_multiprecision::rebuild(
                     config, walker.op_array, boundary, walker.n_trial, out);
             });
@@ -328,17 +329,15 @@ int main(int argc, char **argv) try {
     int negativeSigns = 0;
     int signRecomputes = 0;
     int signCorrections = 0;
+    ProjectorRawSignChecks rawSignChecks;
     bool finiteSamples = true;
     int completedMeasurements = 0;
 
     for (int sample = 0; sample < args.measurements; ++sample) {
         if (sample % kSignRecomputeStride == 0) {
-            const DataType raw = qmc.getSignRaw();
+            const PfaffianResult raw = qmc.getSignRawWithStatus();
             ++signRecomputes;
-            if (std::abs(qmc.sign - raw) > kSignCorrectionTolerance) {
-                qmc.sign = raw.real() >= 0 ? DataType(1, 0) : DataType(-1, 0);
-                ++signCorrections;
-            }
+            rawSignChecks.record(qmc.sign, raw, kSignCorrectionTolerance);
         }
         const auto before = fields(walker);
         MatType g;
@@ -405,6 +404,9 @@ int main(int argc, char **argv) try {
                        << double(sampleAccepted) / sampleAttempted << '\n';
         }
     }
+#ifdef PFQMC_TEST_FORCE_ZERO_AVERAGE_SIGN
+    signSum = 0.0;
+#endif
 
     std::ofstream binRecords(binsPath);
     if (!binRecords) throw std::runtime_error("cannot open bin-record output");
@@ -417,6 +419,10 @@ int main(int argc, char **argv) try {
                    << bin.signed_S_pi_dq_numerator << '\n';
     }
 
+    const bool zeroAverageSign = finiteSamples &&
+        completedMeasurements == args.measurements &&
+        std::isfinite(signSum) &&
+        std::abs(signSum) <= kJackknifeDenominatorTolerance;
     bool jackknifeValid = finiteSamples && completedMeasurements == args.measurements &&
                           std::isfinite(signSum) &&
                           std::abs(signSum) > kJackknifeDenominatorTolerance &&
@@ -428,7 +434,7 @@ int main(int argc, char **argv) try {
     if (completedMeasurements != args.measurements && failureReason.empty()) {
         failureReason = "incomplete_measurement_loop";
     }
-    if (!jackknifeValid && failureReason.empty()) {
+    if (!jackknifeValid && !zeroAverageSign && failureReason.empty()) {
         failureReason = "pooled_jackknife_denominator_below_tolerance";
     }
 
@@ -458,12 +464,20 @@ int main(int argc, char **argv) try {
     }
 
     const double contact = 1.0 / (4.0 * args.L);
-    const double spi = jackknifeValid ? signedSpiSum / signSum : 0.0;
-    const double spidq = jackknifeValid ? signedSpidqSum / signSum : 0.0;
-    const double rCdw = jackknifeValid ? 1.0 - signedSpidqSum / signedSpiSum : 0.0;
-    const double spiError = jackknifeValid ? jackknifeError(jackknifeSpi) : 0.0;
-    const double spidqError = jackknifeValid ? jackknifeError(jackknifeSpidq) : 0.0;
-    const double rError = jackknifeValid ? jackknifeError(jackknifeR) : 0.0;
+    const double unresolved = std::numeric_limits<double>::quiet_NaN();
+    const double spi = jackknifeValid ? signedSpiSum / signSum : unresolved;
+    const double spidq = jackknifeValid ? signedSpidqSum / signSum : unresolved;
+    const double rCdw = jackknifeValid ? 1.0 - signedSpidqSum / signedSpiSum : unresolved;
+    const double spiError = jackknifeValid ? jackknifeError(jackknifeSpi) : unresolved;
+    const double spidqError = jackknifeValid ? jackknifeError(jackknifeSpidq) : unresolved;
+    const double rError = jackknifeValid ? jackknifeError(jackknifeR) : unresolved;
+    std::vector<double> signBinMeans;
+    for (const BinRecord &bin : bins) if (bin.sample_count > 0)
+        signBinMeans.push_back(bin.sign_sum/bin.sample_count);
+    const double averageSignError = standardError(signBinMeans);
+    const char *observableStatus = jackknifeValid ? "resolved" :
+        (zeroAverageSign ? "unresolved_zero_average_sign" :
+                           "unresolved_jackknife_denominator");
 
     const bool numericalTolerancePass = finiteSamples &&
         maxSignImag <= kFailureTolerance &&
@@ -472,7 +486,10 @@ int main(int argc, char **argv) try {
     if (!numericalTolerancePass && failureReason.empty()) {
         failureReason = "numerical_diagnostic_exceeds_tolerance";
     }
-    const int exitCode = jackknifeValid && numericalTolerancePass ? 0 : 3;
+    const bool samplingComplete = finiteSamples &&
+        completedMeasurements == args.measurements;
+    const int exitCode = samplingComplete && numericalTolerancePass &&
+        (jackknifeValid || zeroAverageSign) ? 0 : 3;
     const std::string status = exitCode == 0 ? "complete" : "failed";
     const double runtime = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - started).count();
@@ -530,21 +547,27 @@ int main(int argc, char **argv) try {
               << ",\"bra_ket_hs_independent\":" << (walker.independent ? "true" : "false")
               << ",\"onsite_contact\":" << contact
               << ",\"onsite_contact_is_diagnostic_only\":true"
-              << ",\"S_pi_offsite\":" << spi - contact
-              << ",\"S_pi_offsite_mean\":" << spi - contact
-              << ",\"S_pi_offsite_err\":" << spiError
-              << ",\"S_pi_dq_offsite\":" << spidq - contact
-              << ",\"S_pi_dq_offsite_mean\":" << spidq - contact
-              << ",\"S_pi_dq_offsite_err\":" << spidqError
-              << ",\"S_pi\":" << spi << ",\"S_pi_mean\":" << spi
-              << ",\"S_pi_err\":" << spiError
-              << ",\"S_pi_dq\":" << spidq << ",\"S_pi_dq_mean\":" << spidq
-              << ",\"S_pi_dq_err\":" << spidqError
-              << ",\"R_cdw\":" << rCdw << ",\"R_cdw_mean\":" << rCdw
-              << ",\"R_cdw_err\":" << rError
+              << ",\"sign_reweighted_observables_status\":\"" << observableStatus << "\""
+              << ",\"S_pi_offsite\":";
+    projectorJsonNumber(std::cout,spi-contact,jackknifeValid);
+    std::cout << ",\"S_pi_offsite_mean\":"; projectorJsonNumber(std::cout,spi-contact,jackknifeValid);
+    std::cout << ",\"S_pi_offsite_err\":"; projectorJsonNumber(std::cout,spiError,jackknifeValid);
+    std::cout << ",\"S_pi_dq_offsite\":"; projectorJsonNumber(std::cout,spidq-contact,jackknifeValid);
+    std::cout << ",\"S_pi_dq_offsite_mean\":"; projectorJsonNumber(std::cout,spidq-contact,jackknifeValid);
+    std::cout << ",\"S_pi_dq_offsite_err\":"; projectorJsonNumber(std::cout,spidqError,jackknifeValid);
+    std::cout << ",\"S_pi\":"; projectorJsonNumber(std::cout,spi,jackknifeValid);
+    std::cout << ",\"S_pi_mean\":"; projectorJsonNumber(std::cout,spi,jackknifeValid);
+    std::cout << ",\"S_pi_err\":"; projectorJsonNumber(std::cout,spiError,jackknifeValid);
+    std::cout << ",\"S_pi_dq\":"; projectorJsonNumber(std::cout,spidq,jackknifeValid);
+    std::cout << ",\"S_pi_dq_mean\":"; projectorJsonNumber(std::cout,spidq,jackknifeValid);
+    std::cout << ",\"S_pi_dq_err\":"; projectorJsonNumber(std::cout,spidqError,jackknifeValid);
+    std::cout << ",\"R_cdw\":"; projectorJsonNumber(std::cout,rCdw,jackknifeValid);
+    std::cout << ",\"R_cdw_mean\":"; projectorJsonNumber(std::cout,rCdw,jackknifeValid);
+    std::cout << ",\"R_cdw_err\":"; projectorJsonNumber(std::cout,rError,jackknifeValid);
+    std::cout
               << ",\"average_sign\":" << signSum / std::max(1, completedMeasurements)
               << ",\"average_sign_mean\":" << signSum / std::max(1, completedMeasurements)
-              << ",\"average_sign_err\":" << 0.0
+              << ",\"average_sign_err\":" << averageSignError
               << ",\"acceptance\":" << (attempted ? double(accepted) / attempted : 0.0)
               << ",\"runtime_seconds\":" << runtime
               << ",\"negative_signs\":" << negativeSigns
@@ -561,6 +584,7 @@ int main(int argc, char **argv) try {
               << ",\"pre_decision_rebuild_count\":" << qmc.pre_decision_rebuild_count
               << ",\"post_accept_rebuild_count\":" << qmc.post_accept_rebuild_count
               << ",\"multiprecision_fallback\":" << (multiprecisionEnabled ? "true" : "false")
+              << ",\"multiprecision_record_proxy\":" << (multiprecisionRecord ? "true" : "false")
               << ",\"multiprecision_fallback_count\":" << qmc.multiprecision_fallback_count
               << ",\"multiprecision_proxy_trigger_count\":" << qmc.multiprecision_proxy_trigger_count
               << ",\"multiprecision_condition_samples\":"
@@ -569,8 +593,15 @@ int main(int argc, char **argv) try {
               << ",\"multiprecision_condition_p999\":" << conditionQuantile(.999)
               << ",\"multiprecision_condition_max\":" << conditionQuantile(1.0)
               << ",\"guard_trigger_frequency\":" << guardFrequency
-              << ",\"min_update_denominator\":" << reportedMinDenominator
-              << ",\"guard_threshold\":" << args.guard_threshold << "}\n";
+              << ",\"min_observed_update_denominator\":";
+    projectorJsonNumber(std::cout,reportedMinDenominator,std::isfinite(reportedMinDenominator));
+    std::cout << ",\"guard_min_prepared_denominator\":";
+    projectorJsonNumber(std::cout,qmc.min_update_denominator,
+                        args.adaptive_guard && std::isfinite(qmc.min_update_denominator));
+    std::cout << ",\"guard_threshold\":" << args.guard_threshold;
+    projectorJsonRawSignChecks(std::cout,rawSignChecks);
+    projectorJsonBuildProvenance(std::cout,qmc);
+    std::cout << "}\n";
     return exitCode;
 } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

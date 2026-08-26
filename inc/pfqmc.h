@@ -236,7 +236,20 @@ public:
             product = block * product;
             block.setIdentity();
         }
-        MatType lhs = product.T.inverse();
+        Eigen::FullPivLU<MatType> tFactor(product.T);
+        if (!tFactor.isInvertible() || !std::isfinite(tFactor.rcond()) ||
+            tFactor.rcond() <= 0.0) {
+            return std::numeric_limits<double>::infinity();
+        }
+        const MatType identity = MatType::Identity(nDim, nDim);
+        MatType lhs = tFactor.solve(identity);
+        const double solveResidual =
+            (product.T*lhs-identity).norm()/std::max(
+                identity.norm(), std::numeric_limits<double>::min());
+        if (!lhs.allFinite() || !std::isfinite(solveResidual) ||
+            solveResidual > 1e-8) {
+            return std::numeric_limits<double>::infinity();
+        }
         dVecType dplus(nDim), dminus(nDim);
         for (int i=0;i<nDim;++i) {
 #ifdef PFQMC_SCALE_SAFE_UDT
@@ -261,6 +274,7 @@ public:
     // get sign by computing the pfaffian of
     // a 4N * 4N matrix
     DataType getSignRaw();
+    PfaffianResult getSignRawWithStatus();
 
     // should provide same result as getSignRaw
     // but by computing the pfaffian of a 2N * 2N matrix
