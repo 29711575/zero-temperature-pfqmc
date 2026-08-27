@@ -1,0 +1,11 @@
+results/
+spot_checks/
+*.o[0-9]*
+*.e[0-9]*
+corrected_per_seed.csv
+corrected_grouped_average_sign.csv
+changed_seeds.csv
+changed_cells.csv
+spot_manifest.csv
+runtime_overhead.csv
+*.png

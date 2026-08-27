@@ -1,0 +1,5 @@
+input_rows=186
+unique_seeds=150
+duplicate_rows=36
+pbc_hs0=132
+obc_hs1=18
