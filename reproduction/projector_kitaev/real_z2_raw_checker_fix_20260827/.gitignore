@@ -4,6 +4,7 @@ regression_results/
 results/
 results_center_oracle/
 smoke/
+smoke_center/
 *.o*
 *.e*
 build_provenance.txt

@@ -1,2 +1,0 @@
-measurement,legacy_sign,physical_z2_sign,oracle_z2,legacy_phase_re,legacy_phase_im,diagnostic_phase_re,diagnostic_phase_im,raw_status,raw_trusted,raw_z2,S_pi,S_pi_dq,R_CDW,acceptance,shadow_match,hs_hash,rng_hash,trajectory_hash,green_error
-0,1,1,1,0.95272991176692945,0.30381855641908995,0.95272991176692945,0.30381855641908995,untrusted_condition,0,0,0.0992785587266031,0.033938577574706502,0.65814796256090102,0.61736111111111114,1,18397361033166874209,5540065275487993562,11343649531016529220,1.9474897109465629e-15
