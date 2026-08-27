@@ -5,13 +5,13 @@
 #PBS -l mem=8gb
 #PBS -l walltime=48:00:00
 #PBS -j oe
-set -euo pipefail
 base=/home/sunxr/new-pfqmc-fix-real-z2-and-raw-checker/reproduction/projector_kitaev/corrected_real_z2_20260827
 source /etc/profile >/dev/null 2>&1
 module load anaconda3 >/dev/null 2>&1
 set +u
 source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
 set -u
+set -eo pipefail
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 cd "$base"
 python3 run_replay_task.py spot_manifest.csv "$PBS_ARRAY_INDEX" "$base/spot_checks" --mp-spot-stride 400
