@@ -14,6 +14,7 @@
 #include "pfqmc.h"
 #include "../projector_kitaev/projector_contour.h"
 #include "../projector_kitaev/projector_json.h"
+#include "../projector_kitaev/projector_mp_z2_oracle.h"
 #include "multiprecision_driven_rebuild.h"
 
 namespace {
@@ -273,7 +274,11 @@ int main(int argc, char **argv) try {
         args.boundary, args.delta, args.mu, 0);
     rdGenerator random(args.seed);
     DrivenWalker walker(&config, &random, args);
-    PfQMC qmc(&walker, kDefaultStabilizationInterval);
+    auto z2Oracle=[](const std::vector<Operator*>&ops){
+        return projector_mp_z2::fullContourZ2(ops);
+    };
+    PfQMC qmc(&walker, kDefaultStabilizationInterval,
+              PfQMCSignMode::real_z2, z2Oracle);
     qmc.configureAdaptiveGuard(args.adaptive_guard, args.guard_threshold, 100.0);
 
     const char *mpEnv = std::getenv("PFQMC_MULTIPRECISION_FALLBACK");
@@ -335,14 +340,16 @@ int main(int argc, char **argv) try {
 
     for (int sample = 0; sample < args.measurements; ++sample) {
         if (sample % kSignRecomputeStride == 0) {
-            const PfaffianResult raw = qmc.getSignRawWithStatus();
+            const PfaffianResult raw = qmc.checkRawSignReadOnly();
             ++signRecomputes;
-            rawSignChecks.record(qmc.sign, raw, kSignCorrectionTolerance);
+            rawSignChecks.record(DataType(qmc.physicalZ2Sign(),0), raw,
+                                 kSignCorrectionTolerance);
         }
         const auto before = fields(walker);
         MatType g;
         DataType capturedSign;
-        qmc.rightSweep(walker.center_boundary, &g, &capturedSign);
+        int capturedZ2=0;
+        qmc.rightSweep(walker.center_boundary, &g, &capturedSign, &capturedZ2);
         const auto afterRight = fields(walker);
         long long sampleAccepted = changes(before, afterRight);
         long long sampleAttempted = before.size();
@@ -366,7 +373,7 @@ int main(int argc, char **argv) try {
             }
         }
 
-        const double sampledSign = capturedSign.real() >= 0 ? 1.0 : -1.0;
+        const double sampledSign = capturedZ2;
         const double signedSpi = -sampledSign * rawSpi.real();
         const double signedSpidq = -sampledSign * rawSpidq.real();
         signSum += sampledSign;
