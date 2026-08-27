@@ -17,6 +17,17 @@ def sha256(path):
     return h.hexdigest()
 
 
+def recorded_trajectory_sha256(path):
+    """Hash only discrete/cumulative columns actually preserved by old archives."""
+    h = hashlib.sha256()
+    with path.open(newline='') as stream:
+        for row in csv.DictReader(stream):
+            record = '|'.join(row[name] for name in
+                              ('measurement', 'sign', 'acceptance', 'raw_sign_mismatch'))
+            h.update((record + '\n').encode())
+    return h.hexdigest()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('manifest')
@@ -58,13 +69,22 @@ def main():
     legacy = out / 'legacy_replay.csv'
     legacy_hash = sha256(legacy) if legacy.is_file() else None
     expected_hash = row['archive_measurements_sha256']
+    archive_path = Path(row['archive_measurements'])
+    archive_record_hash = recorded_trajectory_sha256(archive_path)
+    replay_record_hash = recorded_trajectory_sha256(legacy) if legacy.is_file() else None
+    internal_shadow = bool(result and result.get('shadow_trajectory_match'))
     wrapper = {
         'task_index': args.task_index,
         'exit_code': completed.returncode,
         'wrapper_elapsed_seconds': elapsed,
         'archive_measurements_sha256': expected_hash,
         'legacy_replay_sha256': legacy_hash,
-        'archive_trajectory_exact': legacy_hash == expected_hash,
+        'archive_full_measurements_exact': legacy_hash == expected_hash,
+        'archive_recorded_trajectory_sha256': archive_record_hash,
+        'legacy_replay_recorded_trajectory_sha256': replay_record_hash,
+        'archive_recorded_trajectory_exact': replay_record_hash == archive_record_hash,
+        'internal_hs_rng_trajectory_exact': internal_shadow,
+        'trajectory_gate_pass': replay_record_hash == archive_record_hash and internal_shadow,
         'new_executable_sha256': sha256(executable),
         'mp_spot_stride': args.mp_spot_stride,
         'result_json_present': result is not None,
@@ -73,7 +93,7 @@ def main():
     (out / 'wrapper.json').write_text(json.dumps(wrapper, indent=2, sort_keys=True) + '\n')
     # Keep the PBS array healthy so every archived failure is available to classification.
     print(json.dumps({key: wrapper[key] for key in ('task_index', 'exit_code',
-          'archive_trajectory_exact', 'result_json_present')}))
+          'trajectory_gate_pass', 'result_json_present')}))
 
 
 if __name__ == '__main__':
