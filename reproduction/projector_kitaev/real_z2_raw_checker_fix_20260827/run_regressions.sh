@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 base=$(cd "$(dirname "$0")" && pwd);out="$base/regression_results";mkdir -p "$out"
+set +u;source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null;set -u
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 "$base/bin/generic_complex_regression" > "$out/generic_complex.json"
 "$base/core_build/bin/sign_interface_hardening" > "$out/sign_interface.json"
