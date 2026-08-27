@@ -1,0 +1,8 @@
+#!/bin/bash
+#PBS -N real_z2_final
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l mem=2gb
+#PBS -l walltime=01:00:00
+#PBS -j oe
+/opt/ohpc/pub/apps/anaconda3/bin/python3.11 /home/sunxr/new-pfqmc-fix-real-z2-and-raw-checker/reproduction/projector_kitaev/real_z2_raw_checker_fix_20260827/finalize.py
