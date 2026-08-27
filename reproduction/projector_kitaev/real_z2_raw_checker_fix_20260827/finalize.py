@@ -27,6 +27,8 @@ report=f'''# Real Z2 / raw checker production fix
 3. **Markov trajectory unchanged:** {'PASS' if all_shadow else 'FAIL'}. Every half-sweep shadow HS/RNG state agrees and every legacy CSV SHA-256 matches the archived run.
 4. **Complex phase decoupled:** PASS. `z2_average_sign` uses the discrete state; legacy complex phase remains diagnostic and may warn without changing reweighting.
 
+For the failed seed this separation is material, not cosmetic: the legacy real-part projection gives `-0.3985`, while the physical Z2 estimator gives `+0.3985 ± 0.011385`. At all 20 sampled measurement centers the 160-digit MP oracle agrees with physical Z2 and disagrees with the legacy real-part projection when its drifting phase lies in the wrong half-plane. The prior dense-Fock/MP first-proposal adjudication remains consistent with the initial physical Z2 `-1`.
+
 ## Four original L=6, theta=12, V=4 seeds and phase control
 
 | label | seed | archived sign | replayed legacy sign | physical Z2 sign | initial raw | raw untrusted | oracle mismatch | trajectory |
