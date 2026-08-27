@@ -1,0 +1,13 @@
+bin/
+core_build/
+regression_results/
+results/
+smoke/
+*.o*
+*.e*
+build_provenance.txt
+executable_sha256.txt
+submitted_jobs.txt
+REAL_Z2_RAW_CHECKER_FIX_REPORT.md
+before_after_comparison.csv
+failed_seed_oracle_comparison.csv
