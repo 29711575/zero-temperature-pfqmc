@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 base=$(cd "$(dirname "$0")" && pwd);i=${PBS_ARRAY_INDEX:?};row=$(awk -F, -v i="$i" 'NR==i+2{print;exit}' "$base/manifest.csv"|tr -d '\r');IFS=, read -r task label L theta V beta dt seed burn meas old expected <<< "$row";[[ "$task" == "$i" ]]||exit 2
-out="$base/results/$label";mkdir -p "$out";[[ ! -e "$out/result.json" ]]||{ echo "existing result retained" >&2;exit 3;}
+out="$base/results_center_oracle/$label";mkdir -p "$out";[[ ! -e "$out/result.json" ]]||{ echo "existing result retained" >&2;exit 3;}
 set +u;source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null;set -u;export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 "$base/bin/projector_real_z2_driver" "$L" "$theta" "$beta" "$dt" "$V" 1 0 0 0 "$seed" "$burn" "$meas" 1 "$out/before_after.csv" 200 20 "$out/legacy_measurements.csv" > "$out/result.json.tmp" 2> "$out/stderr.log"
 got=$(sha256sum "$out/legacy_measurements.csv"|awk '{print $1}');[[ "$got" == "$expected" ]]||{ echo "legacy trajectory hash mismatch expected=$expected got=$got" >&2;exit 4;}

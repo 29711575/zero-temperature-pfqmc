@@ -2,10 +2,10 @@
 import csv,json,pathlib
 base=pathlib.Path(__file__).resolve().parent; manifest=list(csv.DictReader((base/'manifest.csv').open())); rows=[]
 for m in manifest:
- d=json.load((base/'results'/m['label']/'result.json').open()); p=dict(m);p.update(d);rows.append(p)
+ d=json.load((base/'results_center_oracle'/m['label']/'result.json').open()); p=dict(m);p.update(d);rows.append(p)
 cols=['label','L','theta','V','seed','old_average_sign','legacy_average_sign','z2_average_sign','z2_average_sign_err','initial_physical_z2','initial_raw_status','initial_raw_condition_proxy','raw_sign_trusted_count','raw_sign_untrusted_count','raw_sign_mismatch_count','mp_oracle_adjudication_count','shadow_oracle_z2_comparisons','shadow_oracle_z2_mismatch_count','shadow_trajectory_match','trajectory_hash','max_sign_imag','green_rebuild_relative_error_max','udt_guard_triggers']
 with (base/'before_after_comparison.csv').open('w',newline='') as f:w=csv.DictWriter(f,fieldnames=cols);w.writeheader();w.writerows([{k:r.get(k) for k in cols} for r in rows])
-failed=next(r for r in rows if r['label']=='failed_target'); detail=list(csv.DictReader((base/'results/failed_target/before_after.csv').open())); oracle=[r for r in detail if int(r['oracle_z2'])!=0]
+failed=next(r for r in rows if r['label']=='failed_target'); detail=list(csv.DictReader((base/'results_center_oracle/failed_target/before_after.csv').open())); oracle=[r for r in detail if int(r['oracle_z2'])!=0]
 with (base/'failed_seed_oracle_comparison.csv').open('w',newline='') as f:w=csv.DictWriter(f,fieldnames=detail[0].keys());w.writeheader();w.writerows(oracle)
 reg=(base/'regression_results/regression_summary.csv').read_text().strip();build=dict(x.split('=',1) for x in (base/'build_provenance.txt').read_text().splitlines() if '=' in x)
 all_shadow=all(r['shadow_trajectory_match'] for r in rows); all_oracle=all(r['shadow_oracle_z2_mismatch_count']==0 for r in rows); all_untrusted=failed['raw_sign_untrusted_count']>0 and failed['raw_sign_check_mismatch']==0

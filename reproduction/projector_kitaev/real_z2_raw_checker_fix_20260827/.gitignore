@@ -2,6 +2,7 @@ bin/
 core_build/
 regression_results/
 results/
+results_center_oracle/
 smoke/
 *.o*
 *.e*
