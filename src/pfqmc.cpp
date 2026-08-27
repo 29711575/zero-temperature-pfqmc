@@ -262,10 +262,16 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
             *captured_g = g;
             *captured_sign = sign;
             if (captured_z2_sign != nullptr) *captured_z2_sign = physicalZ2Sign();
-            if (captured_z2_oracle_used != nullptr)
-                *captured_z2_oracle_used=last_z2_update_used_oracle;
-            if (captured_oracle_z2 != nullptr)
-                *captured_oracle_z2=last_z2_update_used_oracle?last_mp_oracle_z2:0;
+            if (captured_z2_oracle_used != nullptr || captured_oracle_z2 != nullptr) {
+                if (!realZ2Mode() || !initial_z2_oracle)
+                    throw std::runtime_error("capture Z2 adjudication requires real-Z2 mode and an oracle");
+                const int oracleZ2=initial_z2_oracle(op_array);
+                ++mp_oracle_adjudication_count;
+                if (oracleZ2!=z2_sign)
+                    throw std::runtime_error("hard diagnostic failure: center MP oracle disagrees with transported physical Z2");
+                if (captured_z2_oracle_used != nullptr) *captured_z2_oracle_used=true;
+                if (captured_oracle_z2 != nullptr) *captured_oracle_z2=oracleZ2;
+            }
             captureOccurred = true;
         }
     }
