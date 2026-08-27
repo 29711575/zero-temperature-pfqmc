@@ -28,7 +28,8 @@ bool leftRecoveryFinite(const MatType &green)
 }
 }
 
-PfQMC::PfQMC(Spinless_tV *walker, int _stb)
+PfQMC::PfQMC(Spinless_tV *walker, int _stb, PfQMCSignMode mode,
+             std::function<int(const std::vector<Operator *> &)> z2_oracle)
 {
     if (walker == nullptr) {
         throw std::invalid_argument("PfQMC requires a non-null walker");
@@ -40,6 +41,8 @@ PfQMC::PfQMC(Spinless_tV *walker, int _stb)
         throw std::invalid_argument("PfQMC requires a non-empty contour");
     }
     stb = _stb;
+    sign_mode = mode;
+    initial_z2_oracle = std::move(z2_oracle);
     nDim = walker->nDim;
     g = MatType::Identity(nDim, nDim);
     op_array = walker->op_array;
@@ -62,19 +65,66 @@ PfQMC::PfQMC(Spinless_tV *walker, int _stb)
     leftInit();
     rightInit();
     const PfaffianResult initialSign = getSignRawWithStatus();
-    if (!initialSign.ok()) {
+    if (!initialSign.ok() && !initialSign.untrusted()) {
         throw std::runtime_error(
             std::string("initial raw sign unavailable: ") +
             pfaffianStatusName(initialSign.status));
     }
     sign = initialSign.value;
+    max_complex_phase_imag = std::abs(sign.imag());
+    if (realZ2Mode()) {
+        if (initialSign.ok()) {
+            ++raw_sign_trusted_count;
+            z2_sign = initialSign.value.real() >= 0.0 ? 1 : -1;
+        } else {
+            ++raw_sign_untrusted_count;
+            if (!initial_z2_oracle)
+                throw std::runtime_error("real-Z2 initialization requires an oracle when raw sign is untrusted");
+            z2_sign = initial_z2_oracle(op_array);
+            ++mp_oracle_adjudication_count;
+            if (z2_sign != -1 && z2_sign != 1)
+                throw std::runtime_error("real-Z2 initialization oracle returned a non-Z2 value");
+        }
+    }
+}
+
+void PfQMC::updatePhysicalZ2(const DataType &phaseFactor)
+{
+    if (!realZ2Mode()) return;
+    last_z2_update_used_oracle=false;
+    last_mp_oracle_z2=0;
+    const double magnitude = std::abs(phaseFactor);
+    if (!std::isfinite(phaseFactor.real()) || !std::isfinite(phaseFactor.imag()) ||
+        !std::isfinite(magnitude) || magnitude == 0.0)
+        throw std::runtime_error("real-Z2 update received a nonfinite/zero phase factor");
+    const double reality = std::abs(phaseFactor.imag()) / std::max(std::abs(phaseFactor.real()), 1e-300);
+    if (!std::isfinite(reality) || reality > 1e-8 || std::abs(phaseFactor.real()) < 1e-12) {
+        if (!initial_z2_oracle) {
+            std::ostringstream message;
+            message << std::setprecision(17)
+                    << "real-Z2 update received a significantly complex/indeterminate ratio: real="
+                    << phaseFactor.real() << "; imag=" << phaseFactor.imag()
+                    << "; imag_over_real=" << reality;
+            throw std::runtime_error(message.str());
+        }
+        z2_sign=initial_z2_oracle(op_array);
+        ++mp_oracle_adjudication_count;
+        last_z2_update_used_oracle=true;
+        last_mp_oracle_z2=z2_sign;
+        if(z2_sign!=-1&&z2_sign!=1)throw std::runtime_error("real-Z2 update oracle returned a non-Z2 value");
+        return;
+    }
+    if (phaseFactor.real() < 0.0) z2_sign = -z2_sign;
 }
 
 void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
-                       DataType *captured_sign)
+                       DataType *captured_sign, int *captured_z2_sign,
+                       bool *captured_z2_oracle_used,
+                       int *captured_oracle_z2)
 {
     if (capture_boundary == -1) {
-        if (captured_g != nullptr || captured_sign != nullptr) {
+        if (captured_g != nullptr || captured_sign != nullptr || captured_z2_sign != nullptr ||
+            captured_z2_oracle_used != nullptr || captured_oracle_z2 != nullptr) {
             throw std::invalid_argument(
                 "capture outputs require a requested capture boundary");
         }
@@ -105,10 +155,12 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
     MatType Aseg = MatType::Identity(nDim, nDim);
     int curSeg = 0;
     DataType signCur;
+    DataType z2Segment(1);
     for (int l = 0; l < op_length; l++)
     {
         Operator *op = op_array[l];
-        const int proposalCount = adaptive_guard ? op->singleFlipProposalCount() : 0;
+        const int proposalCount = (adaptive_guard || realZ2Mode())
+            ? op->singleFlipProposalCount() : 0;
         if (proposalCount > 0)
         {
             signCur = DataType(1);
@@ -121,12 +173,14 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
                 const double minDenominator = op->preparedMinDenominator();
                 min_update_denominator = std::min(min_update_denominator, minDenominator);
                 DataType ratio = op->preparedRatio();
-                const bool dangerous = minDenominator < guard_threshold ||
-                                       std::abs(ratio) > guard_ratio_upper;
+                const bool dangerous = adaptive_guard &&
+                    (minDenominator < guard_threshold ||
+                     std::abs(ratio) > guard_ratio_upper);
                 if (!dangerous)
                 {
                     const bool accept = uniform < std::abs(ratio);
-                    signCur *= op->finishSingleFlip(g, accept, true);
+                    const DataType delta=op->finishSingleFlip(g, accept, true);
+                    signCur *= delta;
                     continue;
                 }
 
@@ -142,13 +196,15 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
                 if (!accept)
                 {
                     // Keep the newly stabilized current-configuration Green.
-                    signCur *= op->finishSingleFlip(g, false, false);
+                    const DataType delta=op->finishSingleFlip(g, false, false);
+                    signCur *= delta;
                 }
                 else
                 {
                     // Mutate HS/B without the ill-conditioned rank update,
                     // then rebuild once more for the accepted configuration.
-                    signCur *= op->finishSingleFlip(g, true, false);
+                    const DataType delta=op->finishSingleFlip(g, true, false);
+                    signCur *= delta;
                     rebuildGreenFromFullContourAtBoundary(l, g);
                     installMultiprecisionIfNeeded(l, g);
                     ++adaptive_rebuild_count;
@@ -161,6 +217,8 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
             signCur = op->update(g);
         }
         this->sign *= signCur;
+        z2Segment *= signCur;
+        max_complex_phase_imag = std::max(max_complex_phase_imag, std::abs(sign.imag()));
 
         op_array[l]->left_multiply(Aseg, tmp);
         std::swap(Aseg, tmp);
@@ -199,14 +257,22 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
         }
         if (l + 1 == capture_boundary)
         {
+            updatePhysicalZ2(z2Segment);
+            z2Segment=DataType(1);
             *captured_g = g;
             *captured_sign = sign;
+            if (captured_z2_sign != nullptr) *captured_z2_sign = physicalZ2Sign();
+            if (captured_z2_oracle_used != nullptr)
+                *captured_z2_oracle_used=last_z2_update_used_oracle;
+            if (captured_oracle_z2 != nullptr)
+                *captured_oracle_z2=last_z2_update_used_oracle?last_mp_oracle_z2:0;
             captureOccurred = true;
         }
     }
     if (capture_boundary != -1 && !captureOccurred) {
         throw std::logic_error("requested capture boundary was not reached");
     }
+    updatePhysicalZ2(z2Segment);
 }
 
 bool PfQMC::recoverLeftGreenAfterOperation(
@@ -260,12 +326,22 @@ DataType PfQMC::leftRecoveryUpdateAtBoundary(Operator *op, int boundary)
     return signCur;
 }
 
+DataType PfQMC::realZ2UpdateAtBoundary(Operator *op)
+{
+    const int proposalCount=op->singleFlipProposalCount();
+    if(proposalCount<=0)return op->update(g);
+    DataType signCur(1);
+    for(int aux=0;aux<proposalCount;++aux){double uniform=0;if(!op->prepareSingleFlip(g,aux,&uniform))throw std::runtime_error("single-field proposal unexpectedly unavailable");++proposal_attempt_count;const DataType ratio=op->preparedRatio();const bool accept=uniform<std::abs(ratio);const DataType delta=op->finishSingleFlip(g,accept,true);signCur*=delta;}
+    return signCur;
+}
+
 void PfQMC::leftSweep()
 {
     MatType tmp = MatType::Identity(nDim, nDim);
     MatType Aseg = MatType::Identity(nDim, nDim);
     int curSeg = checkpoints - 1;
     DataType signCur;
+    DataType z2Segment(1);
     for (int l = op_length - 1; l > -1; l--)
     {
         const double structurePrePropagation = left_green_recovery
@@ -276,8 +352,11 @@ void PfQMC::leftSweep()
                 "PROPAGATION", l, -1, structurePrePropagation);
         signCur = left_green_recovery
             ? leftRecoveryUpdateAtBoundary(op_array[l], l)
-            : op_array[l]->update(g);
+            : (realZ2Mode() ? realZ2UpdateAtBoundary(op_array[l])
+                            : op_array[l]->update(g));
         sign *= signCur;
+        z2Segment *= signCur;
+        max_complex_phase_imag = std::max(max_complex_phase_imag, std::abs(sign.imag()));
 
         const double structurePreCompletion = left_green_recovery
             ? leftRecoveryStructureResidual(g) : 0.0;
@@ -314,6 +393,7 @@ void PfQMC::leftSweep()
                     "PROPAGATION", l, -1, structurePreCompletion);
         }
     }
+    updatePhysicalZ2(z2Segment);
 }
 
 PfaffianResult PfQMC::getSignRawWithStatus()
@@ -398,7 +478,64 @@ PfaffianResult PfQMC::getSignRawWithStatus()
         result.status = PfaffianStatus::nonfinite_pivot;
         result.value = DataType(0.0, 0.0);
     }
+    if (realZ2Mode() && result.ok()) {
+        result.condition_proxy = rawContourExponentSpan();
+        const double magnitude = std::abs(signCur);
+        result.phase_reality_error = std::abs(signCur.imag()) /
+            std::max(std::abs(signCur.real()), std::numeric_limits<double>::min());
+        if (!std::isfinite(result.condition_proxy) || result.condition_proxy > 45.0) {
+            result.status = PfaffianStatus::untrusted_condition;
+        } else if (!std::isfinite(magnitude) || magnitude == 0.0 ||
+                   std::abs(magnitude-1.0) > 1e-8 ||
+                   !std::isfinite(result.phase_reality_error) ||
+                   result.phase_reality_error > 1e-8 ||
+                   std::abs(signCur.real()) < 1e-12) {
+            result.status = PfaffianStatus::untrusted_phase;
+        }
+    }
     return result;
+}
+
+double PfQMC::rawContourExponentSpan() const
+{
+    UDT product(nDim);
+    for (Operator *op : op_array) op->stabilizedLeftMultiply(product);
+#ifdef PFQMC_SCALE_SAFE_UDT
+    if (product.Dexp.size() == 0) return std::numeric_limits<double>::infinity();
+    return double(product.Dexp.maxCoeff()) - double(product.Dexp.minCoeff());
+#else
+    if (product.D.size() == 0) return std::numeric_limits<double>::infinity();
+    const double dmax = product.D.maxCoeff();
+    const double dmin = product.D.minCoeff();
+    if (!(dmin > 0.0) || !std::isfinite(dmax) || !std::isfinite(dmin))
+        return std::numeric_limits<double>::infinity();
+    return std::log2(dmax/dmin);
+#endif
+}
+
+PfaffianResult PfQMC::checkRawSignReadOnly()
+{
+    PfaffianResult raw = getSignRawWithStatus();
+    if (!realZ2Mode()) return raw;
+    if (raw.untrusted()) {
+        ++raw_sign_untrusted_count;
+        return raw;
+    }
+    if (!raw.ok()) return raw;
+    ++raw_sign_trusted_count;
+    const int rawZ2 = raw.value.real() >= 0.0 ? 1 : -1;
+    if (rawZ2 == z2_sign) return raw;
+    if (!initial_z2_oracle)
+        throw std::runtime_error("trusted raw/transported Z2 mismatch requires an adjudication oracle");
+    const int oracleZ2 = initial_z2_oracle(op_array);
+    ++mp_oracle_adjudication_count;
+    if (oracleZ2 == z2_sign) {
+        ++raw_sign_mismatch_count;
+        return raw;
+    }
+    if (oracleZ2 == rawZ2)
+        throw std::runtime_error("hard diagnostic failure: MP oracle supports raw Z2 over transported Z2");
+    throw std::runtime_error("hard diagnostic failure: MP oracle disagrees with both raw and transported Z2");
 }
 
 DataType PfQMC::getSignRaw()

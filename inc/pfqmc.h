@@ -22,6 +22,8 @@ struct LeftGreenRecoveryEvent
     double structure_after = 0.0;
 };
 
+enum class PfQMCSignMode { generic_complex, real_z2 };
+
 class PfQMC
 {
 public:
@@ -36,6 +38,16 @@ public:
     std::vector<UDT> udtR;
 
     DataType sign;
+    PfQMCSignMode sign_mode = PfQMCSignMode::generic_complex;
+    int z2_sign = 1;
+    long long raw_sign_trusted_count = 0;
+    long long raw_sign_untrusted_count = 0;
+    long long raw_sign_mismatch_count = 0;
+    long long mp_oracle_adjudication_count = 0;
+    double max_complex_phase_imag = 0.0;
+    bool last_z2_update_used_oracle = false;
+    int last_mp_oracle_z2 = 0;
+    std::function<int(const std::vector<Operator *> &)> initial_z2_oracle;
 
     // Off by default so legacy/static callers retain the original update()
     // path bit-for-bit.  The driven driver enables this explicitly.
@@ -67,7 +79,13 @@ public:
     long long left_recovery_propagation_count = 0;
     std::function<void(const LeftGreenRecoveryEvent &)> left_recovery_event_hook;
 
-    PfQMC(Spinless_tV *walker, int _stb = 10);
+    PfQMC(Spinless_tV *walker, int _stb = 10,
+          PfQMCSignMode mode = PfQMCSignMode::generic_complex,
+          std::function<int(const std::vector<Operator *> &)> z2_oracle = {});
+
+    bool realZ2Mode() const { return sign_mode == PfQMCSignMode::real_z2; }
+    int physicalZ2Sign() const { return realZ2Mode() ? z2_sign : (sign.real() >= 0.0 ? 1 : -1); }
+    DataType diagnosticComplexPhase() const { return sign; }
 
     void configureAdaptiveGuard(bool enabled, double threshold,
                                 double ratio_upper = 100.0)
@@ -163,7 +181,10 @@ public:
     // This is used by projector calculations to measure at a fixed midpoint;
     // the default preserves the finite-temperature API and behavior.
     void rightSweep(int capture_boundary = -1, MatType *captured_g = nullptr,
-                    DataType *captured_sign = nullptr);
+                    DataType *captured_sign = nullptr,
+                    int *captured_z2_sign = nullptr,
+                    bool *captured_z2_oracle_used = nullptr,
+                    int *captured_oracle_z2 = nullptr);
     // Deprecated/debug-only: this cache splice is valid only at the matching
     // checkpoint.  At an arbitrary boundary it omits the unvisited suffix of
     // the current stabilization segment.  Do not use it as a rebuild backend.
@@ -266,6 +287,7 @@ public:
         return s(0) / std::max(s(s.size()-1), std::numeric_limits<double>::min());
     }
     DataType leftRecoveryUpdateAtBoundary(Operator *op, int boundary);
+    DataType realZ2UpdateAtBoundary(Operator *op);
     bool recoverLeftGreenAfterOperation(const char *source, int boundary,
                                         int aux,
                                         double structure_pre_operation);
@@ -275,6 +297,11 @@ public:
     // a 4N * 4N matrix
     DataType getSignRaw();
     PfaffianResult getSignRawWithStatus();
+    PfaffianResult checkRawSignReadOnly();
+    double rawContourExponentSpan() const;
+
+private:
+    void updatePhysicalZ2(const DataType &phase_factor);
 
     // should provide same result as getSignRaw
     // but by computing the pfaffian of a 2N * 2N matrix

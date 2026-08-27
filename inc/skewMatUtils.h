@@ -8,6 +8,8 @@
 
 enum class PfaffianStatus {
     success,
+    untrusted_condition,
+    untrusted_phase,
     invalid_dimension,
     lapack_failure,
     zero_pivot,
@@ -19,8 +21,14 @@ struct PfaffianResult {
     DataType value = DataType(0.0, 0.0);
     int lapack_info = 0;
     double min_pivot = std::numeric_limits<double>::infinity();
+    double condition_proxy = 1.0;
+    double phase_reality_error = 0.0;
 
     bool ok() const { return status == PfaffianStatus::success; }
+    bool untrusted() const {
+        return status == PfaffianStatus::untrusted_condition ||
+               status == PfaffianStatus::untrusted_phase;
+    }
 };
 
 const char *pfaffianStatusName(PfaffianStatus status);

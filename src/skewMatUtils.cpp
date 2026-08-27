@@ -11,6 +11,8 @@
 const char *pfaffianStatusName(PfaffianStatus status) {
     switch (status) {
     case PfaffianStatus::success: return "success";
+    case PfaffianStatus::untrusted_condition: return "untrusted_condition";
+    case PfaffianStatus::untrusted_phase: return "untrusted_phase";
     case PfaffianStatus::invalid_dimension: return "invalid_dimension";
     case PfaffianStatus::lapack_failure: return "lapack_failure";
     case PfaffianStatus::zero_pivot: return "zero_pivot";

@@ -9,6 +9,8 @@
 #include<complex>
 #include<random>
 #include<iostream>
+#include<sstream>
+#include<cstdint>
 
 #define MKL_Complex16 std::complex<double>
 
@@ -71,6 +73,15 @@ public:
 
     inline double rdNormal() {
         return rdDistNormal(rdEng);
+    }
+
+    // Read-only diagnostic fingerprint; serialization does not advance mt19937.
+    std::uint64_t diagnosticStateHash() const {
+        std::ostringstream out; out << rdEng;
+        const std::string state=out.str();
+        std::uint64_t h=1469598103934665603ULL;
+        for(unsigned char c:state){h^=c;h*=1099511628211ULL;}
+        return h;
     }
 
 };
