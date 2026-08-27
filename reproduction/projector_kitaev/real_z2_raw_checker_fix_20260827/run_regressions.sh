@@ -5,7 +5,7 @@ set +u;source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null;set -u
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 "$base/bin/generic_complex_regression" > "$out/generic_complex.json"
 "$base/core_build/bin/sign_interface_hardening" > "$out/sign_interface.json"
-"$base/core_build/bin/local_update_property" 6 0 0 4 1926155102 20 12 8 "$out/local_flips.csv" > "$out/local_flips.json"
+"$base/core_build/bin/local_update_property" 4 1 1 2 990 10 .2 .4 "$out/local_flips.csv" > "$out/local_flips.json"
 "$base/core_build/bin/right_boundary_green" 6 0 4 1926155102 12 8 .1 "$out/right_boundary.csv" > "$out/right_boundary.json"
 "$base/core_build/bin/reality_symmetry" 6 4 1926155102 4 "$out/reality.csv" > "$out/reality.json"
 "$base/core_build/bin/integration_qmc" 4 .2 .4 .1 2 1 0 1 1 990003 1 2 1 "$out/integration.csv" 1 10 0 1 > "$out/integration.json"
