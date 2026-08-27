@@ -8,6 +8,8 @@ smoke/
 build_provenance.txt
 executable_sha256.txt
 submitted_jobs.txt
+bin_records_seed_*.csv
+local_update_min_repro.txt
 REAL_Z2_RAW_CHECKER_FIX_REPORT.md
 before_after_comparison.csv
 failed_seed_oracle_comparison.csv
