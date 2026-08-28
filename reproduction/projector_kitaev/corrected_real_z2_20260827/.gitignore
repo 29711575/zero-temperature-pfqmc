@@ -1,6 +1,7 @@
 results/
 spot_checks/
 smoke_archive*/
+partial_snapshot_*/
 *.o[0-9]*
 *.e[0-9]*
 corrected_per_seed.csv
