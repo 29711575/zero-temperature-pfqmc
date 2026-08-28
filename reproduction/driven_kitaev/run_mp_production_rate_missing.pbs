@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#PBS -N pfqmc_mp_retry
+#PBS -q workq
+#PBS -J 0-7
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+set -euo pipefail
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+cd "${PBS_O_WORKDIR:?}"
+root=/home/sunxr/PfQMC-main
+base="$root/reproduction/driven_kitaev/results/mp_production_rate"
+bin="$base/bin/driven_driver_mp_rate"
+set +u
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+set -u
+missing_ids=(0 1 6 7 12 13 14 15)
+array_index=${PBS_ARRAY_INDEX:-${PBS_ARRAYID:-}}
+if [[ -z "$array_index" && "${PBS_JOBID:-}" =~ \[([0-9]+)\] ]]; then array_index=${BASH_REMATCH[1]}; fi
+: "${array_index:?missing PBS array index}"
+id=${missing_ids[$array_index]}
+row=$(sed -n "$((id+2))p" manifest_mp_production_rate.csv | tr -d '\r')
+IFS=, read -r manifest_id mode L rate seed <<< "$row"
+[[ "$manifest_id" == "$id" && "$mode" == ON ]]
+out="$base/runs/task_${id}_${mode}_L${L}_R${rate}_s${seed}"
+mkdir -p "$out"
+rm -f "$out/result.json" "$out/status.txt" "$out/stderr.log"
+export PFQMC_MULTIPRECISION_FALLBACK=ON
+export PFQMC_MULTIPRECISION_RECORD_PROXY=ON
+export PFQMC_MULTIPRECISION_CORE_THRESHOLD=1e4
+"$bin" "$L" 0 4 "$rate" 6 8 0.1 1 0 1 300 500 "$seed" 1 0.1 > "$out/result.json" 2> "$out/stderr.log"
+printf 'status=complete\nexit_code=0\njob_id=%s\nretry_array_index=%s\noriginal_task_id=%s\nmode=ON\n' "${PBS_JOBID:-unknown}" "$array_index" "$id" > "$out/status.txt"

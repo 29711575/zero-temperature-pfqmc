@@ -1,0 +1,45 @@
+#!/bin/bash
+#PBS -N pfqmc_sign_scan
+#PBS -q workq
+#PBS -J 0-215
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=168:00:00
+#PBS -j oe
+set -euo pipefail
+
+ssudt_base=/home/sunxr/PfQMC-main/reproduction/projector_kitaev/regression_stress/offcritical_sign_scan
+ssudt_manifest="$ssudt_base/manifest.csv"
+ssudt_row=$(awk -F, -v i="${PBS_ARRAY_INDEX:?}" 'NR==i+2{print;exit}' "$ssudt_manifest" | tr -d '\r')
+IFS=, read -r ssudt_task_id ssudt_campaign ssudt_L ssudt_V ssudt_theta ssudt_beta \
+  ssudt_dt ssudt_delta ssudt_mu ssudt_boundary ssudt_hs ssudt_seed ssudt_burn \
+  ssudt_measurements ssudt_stb ssudt_guard ssudt_diag_stride ssudt_sign_stride \
+  ssudt_output_dir <<< "$ssudt_row"
+[[ "$ssudt_task_id" == "$PBS_ARRAY_INDEX" ]] || exit 2
+
+ssudt_out="$ssudt_base/$ssudt_output_dir"
+mkdir -p "$ssudt_out"
+if [[ -s "$ssudt_out/result.json" ]]; then exit 0; fi
+
+unset SETVARS_COMPLETED || true
+set +u
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+set -u
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+cd /home/sunxr/PfQMC-main/reproduction/projector_kitaev
+
+set +e
+"$ssudt_base/bin/sign_scan_driver_scale_safe" \
+  "$ssudt_L" "$ssudt_theta" "$ssudt_beta" "$ssudt_dt" "$ssudt_V" \
+  "$ssudt_delta" "$ssudt_mu" "$ssudt_boundary" "$ssudt_hs" "$ssudt_seed" \
+  "$ssudt_burn" "$ssudt_measurements" 1 "$ssudt_out/measurements.csv" \
+  "$ssudt_diag_stride" "$ssudt_stb" "$ssudt_guard" "$ssudt_sign_stride" \
+  >"$ssudt_out/result.json.tmp" 2>"$ssudt_out/stderr.log"
+ssudt_rc=$?
+set -e
+if [[ $ssudt_rc -eq 0 ]]; then
+  mv "$ssudt_out/result.json.tmp" "$ssudt_out/result.json"
+  printf 'status=complete\njob_id=%s\n' "${PBS_JOBID:-unknown}" >"$ssudt_out/status.txt"
+else
+  printf 'status=failed\nexit_code=%s\n' "$ssudt_rc" >"$ssudt_out/status.txt"
+  exit "$ssudt_rc"
+fi

@@ -1,0 +1,10 @@
+campaign,tasks
+delta_ed,8
+delta_symmetry,48
+gaussian_exact,60
+gaussian_qmc,60
+hs_crosscheck,288
+known_physics,96
+stability,42
+tiny_ed,56
+tiny_enumeration,56

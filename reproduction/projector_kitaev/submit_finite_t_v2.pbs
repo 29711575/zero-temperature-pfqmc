@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#PBS -N pfqmc_finiteT_v2
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=00:45:00
+#PBS -j oe
+set -euo pipefail
+cd "${PBS_O_WORKDIR:?submit qsub from reproduction/projector_kitaev}"
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh; set -u
+export EIGEN3_INCLUDE_DIR=/home/sunxr/software/eigen-3.4.0
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+./build_finite_t_hpc.sh
+for task_id in 0 1 2 3; do
+  row=$(sed -n "$((task_id + 2))p" manifest_finite_t.csv | tr -d '\r')
+  IFS=, read -r manifest_id L beta dt V delta seed burn measurements threads ignored <<< "$row"
+  output_dir="results/hpc_convergence/finite_t_v2/task_$(printf '%03d' "$task_id")_L${L}_V${V}_b${beta}_s${seed}"
+  mkdir -p "$output_dir"
+  [[ ! -e "$output_dir/result.json" ]] || { echo "existing output retained" >&2; exit 2; }
+  started=$(date +%s); set +e
+  ./finite_t_driver_hpc "$L" "$beta" "$dt" "$V" "$delta" "$seed" "$burn" "$measurements" "$threads" >"$output_dir/result.json" 2>"$output_dir/stderr.log"
+  rc=$?; set -e; ended=$(date +%s)
+  printf 'status=%s\nexit_code=%s\njob_id=%s\nwrapper_seconds=%s\n' "$([[ $rc -eq 0 ]] && echo complete || echo failed)" "$rc" "${PBS_JOBID:-unknown}" "$((ended-started))" >"$output_dir/status.txt"
+  [[ $rc -eq 0 ]] || exit "$rc"
+done

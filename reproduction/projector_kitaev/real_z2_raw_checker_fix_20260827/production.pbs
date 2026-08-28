@@ -1,0 +1,9 @@
+#!/bin/bash
+#PBS -N real_z2_fix
+#PBS -q workq
+#PBS -J 0-4
+#PBS -l nodes=1:ppn=1
+#PBS -l mem=8gb
+#PBS -l walltime=48:00:00
+#PBS -j oe
+exec bash /home/sunxr/new-pfqmc-fix-real-z2-and-raw-checker/reproduction/projector_kitaev/real_z2_raw_checker_fix_20260827/run_array.sh

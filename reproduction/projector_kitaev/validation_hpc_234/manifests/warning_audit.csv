@@ -1,0 +1,6 @@
+audit_id,campaign,task_id,seed,L,V,boundary,dt,theta,beta_trial,burn,measurements,flags,max_sign_imag,sign_corrections,diagnostic_sign_mismatch_count,average_sign,result_path,audit_burn,audit_measurements,direct_check_stride
+0,benchmark,34,984035,6,4,0,0.1,10,8,500,5000,SIGN_IMAG_WARN,0.005793023881974574,0,0,0.462,/home/sunxr/PfQMC-main/reproduction/projector_kitaev/validation_hpc_234/raw/benchmark/task_034_s984035/result.json,100,400,1
+1,benchmark,47,984048,6,6,0,0.1,10,8,500,5000,SIGN_IMAG_WARN,0.0006031407341552512,0,0,0.4428,/home/sunxr/PfQMC-main/reproduction/projector_kitaev/validation_hpc_234/raw/benchmark/task_047_s984048/result.json,100,400,1
+2,benchmark,84,984085,6,6,1,0.1,10,8,500,5000,SIGN_IMAG_WARN,0.000126549950411097,0,0,0.5868,/home/sunxr/PfQMC-main/reproduction/projector_kitaev/validation_hpc_234/raw/benchmark/task_084_s984085/result.json,100,400,1
+3,benchmark,28,984029,6,4,0,0.1,10,8,500,5000,SIGN_CORRECTION,1.3607934021480635e-08,1,0,0.4652,/home/sunxr/PfQMC-main/reproduction/projector_kitaev/validation_hpc_234/raw/benchmark/task_028_s984029/result.json,100,400,1
+4,benchmark,32,984033,6,4,0,0.1,10,8,500,5000,SIGN_CORRECTION,5.049860285298492e-08,1,0,0.4788,/home/sunxr/PfQMC-main/reproduction/projector_kitaev/validation_hpc_234/raw/benchmark/task_032_s984033/result.json,100,400,1

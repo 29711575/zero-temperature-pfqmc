@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N hs_marginal_ed
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=120:00:00
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+base="$root/regression_stress/hs_marginal_followup";mkdir -p "$base/ed"
+[[ ! -s "$base/ed/result.json" ]] || exit 0
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+set +u;source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null;set -u
+python "$root/regression_stress/scripts/same_contour_ed_general.py" --L 10 --V 2 --theta 18 --beta-trial 8 --dt .1 --boundary 0 --delta 1 --mu 0 >"$base/ed/result.json.tmp" 2>"$base/ed/stderr.log"
+mv "$base/ed/result.json.tmp" "$base/ed/result.json"

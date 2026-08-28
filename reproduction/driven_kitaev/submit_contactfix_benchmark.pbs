@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#PBS -N pfqmc_contactfix
+#PBS -q workq
+#PBS -J 0-11
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail;cd "${PBS_O_WORKDIR:?}";i=${PBS_ARRAY_INDEX:?}
+row=$(sed -n "$((i+2))p" manifest_contactfix_benchmark.csv|tr -d '\r');IFS=, read -r id vf dt seed out <<< "$row";[[ "$id" == "$i" ]]||exit 2
+mkdir -p "$out";[[ ! -e "$out/result.json" ]]||exit 2;set +u;source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null;set -u
+export PFQMC_BIN_RECORDS_PATH="$out/bin_records.csv"
+export PFQMC_CODE_VERSION="$(git rev-parse --verify HEAD 2>/dev/null || printf source-tree-no-git)"
+./driven_driver 4 0 "$vf" 1 6 8 "$dt" 1 0 1 300 3000 "$seed" >"$out/result.json" 2>"$out/stderr.log";printf 'status=complete\njob_id=%s\n' "${PBS_JOBID:-unknown}" >"$out/status.txt"

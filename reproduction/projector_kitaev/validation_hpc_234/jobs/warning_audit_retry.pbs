@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -N val234_sigaudit2
+#PBS -q workq
+#PBS -J 0-4
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=12:00:00
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev
+base="$root/validation_hpc_234"
+row=$(awk -F, -v i="${PBS_ARRAY_INDEX:?}" 'NR==i+2{print;exit}' "$base/manifests/warning_audit.csv" | tr -d '\r')
+IFS=, read -r audit_id campaign task_id seed L V boundary dt theta beta_trial old_burn old_measurements flags max_sign_imag sign_corrections old_mismatch average_sign result_path audit_burn audit_measurements direct_check_stride <<< "$row"
+[[ "$audit_id" == "$PBS_ARRAY_INDEX" ]] || exit 2
+out="$base/raw/warning_audit/task_${audit_id}_from_${campaign}_${task_id}_s${seed}_retry1"
+mkdir -p "$out"
+[[ ! -e "$out/result.json" ]] || { echo "existing audit output retained" >&2; exit 3; }
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+cd "$root"
+./validation/sign_warning_audit_driver "$L" "$theta" "$beta_trial" "$dt" "$V" 1 0 "$boundary" 0 "$seed" "$audit_burn" "$audit_measurements" 1 "$out/measurements.csv" 1 "$direct_check_stride" >"$out/result.json" 2>"$out/stderr.log"
+printf 'status=complete\njob_id=%s\n' "${PBS_JOBID:-unknown}" >"$out/status.txt"

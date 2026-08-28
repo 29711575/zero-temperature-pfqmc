@@ -1,0 +1,40 @@
+#!/bin/bash
+#PBS -N ssudt_153450_target
+#PBS -q workq
+#PBS -J 0-59
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=12:00:00
+#PBS -j oe
+set -euo pipefail
+
+base=/home/sunxr/PfQMC-main/reproduction/projector_kitaev/regression_stress/targeted_153450_followup
+main=/home/sunxr/PfQMC-main
+manifest="$base/manifest.csv"
+exe="$main/reproduction/projector_kitaev/regression_stress/bin/regression_driver_scale_safe"
+
+row=$(awk -F, -v id="${PBS_ARRAY_INDEX:?}" 'NR>1 && $1==id {print; found=1; exit} END {if(!found) exit 2}' "$manifest")
+IFS=, read -r task_id old_task_id campaign L V theta beta_trial dt delta mu boundary hs_scheme seed burn measurements stabilization_interval guard diagnostic_stride sign_stride output_dir <<< "$row"
+[[ "$task_id" == "$PBS_ARRAY_INDEX" && "$burn" == 500 && "$measurements" == 5000 && "$stabilization_interval" == 10 && "$guard" == 0 && "$diagnostic_stride" == 100 && "$sign_stride" == 20 ]] || exit 2
+
+out="$base/$output_dir"
+mkdir -p "$out"
+set +u
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+set -u
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+cd "$main/reproduction/projector_kitaev"
+
+set +e
+"$exe" "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" \
+  "$burn" "$measurements" 1 "$out/measurements.csv" "$diagnostic_stride" \
+  "$stabilization_interval" "$guard" "$sign_stride" \
+  >"$out/result.json.tmp" 2>"$out/stderr.log"
+rc=$?
+set -e
+if [[ $rc -eq 0 ]]; then
+  mv "$out/result.json.tmp" "$out/result.json"
+  printf 'status=complete\njob_id=%s\nold_task_id=%s\n' "${PBS_JOBID:-unknown}" "$old_task_id" >"$out/status.txt"
+else
+  printf 'status=failed\nexit_code=%s\njob_id=%s\nold_task_id=%s\n' "$rc" "${PBS_JOBID:-unknown}" "$old_task_id" >"$out/status.txt"
+  exit "$rc"
+fi

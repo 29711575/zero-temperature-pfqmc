@@ -1,0 +1,17 @@
+#!/bin/bash
+#PBS -N val234_autocorr
+#PBS -q workq
+#PBS -J 0-5
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=48:00:00
+#PBS -j oe
+set -euo pipefail
+root=/home/sunxr/PfQMC-main/reproduction/projector_kitaev; base="$root/validation_hpc_234"
+row=$(awk -F, -v i="${PBS_ARRAY_INDEX:?}" 'NR==i+2{print;exit}' "$base/manifests/autocorr.csv" | tr -d '\r')
+IFS=, read -r task_id L V theta beta_trial dt delta mu boundary hs_scheme seed burn measurements output_dir <<< "$row"
+[[ "$task_id" == "$PBS_ARRAY_INDEX" ]] || exit 2
+out="$base/$output_dir"; mkdir -p "$out"; [[ ! -e "$out/result.json" ]] || exit 3
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+cd "$root"; ./validation/projector_bins_driver "$L" "$theta" "$beta_trial" "$dt" "$V" "$delta" "$mu" "$boundary" "$hs_scheme" "$seed" "$burn" "$measurements" 1 "$out/measurements.csv" 0 >"$out/result.json" 2>"$out/stderr.log"
+printf 'status=complete\njob_id=%s\n' "${PBS_JOBID:-unknown}" >"$out/status.txt"

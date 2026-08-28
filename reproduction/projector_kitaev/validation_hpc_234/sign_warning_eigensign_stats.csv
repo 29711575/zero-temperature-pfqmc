@@ -1,0 +1,4 @@
+metric,value,source,availability
+genuine_pm1_transport_direct_flips,0,"same-configuration sweep-end (11001) and center (5000) checks",available
+min_abs_real_raw_sign,,"targeted records store thresholded direct sign and imaginary component only",unavailable
+max_normalized_raw_sign_distance_to_nearest_pm1,,"raw real component and normalized complex raw sign were not retained",unavailable

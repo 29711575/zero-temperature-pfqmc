@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#PBS -N pfqmc_static_reg
+#PBS -q workq
+#PBS -J 0-1
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+set -euo pipefail
+cd "${PBS_O_WORKDIR:?}"
+i=${PBS_ARRAY_INDEX:?}; row=$(sed -n "$((i+2))p" manifest_static_regression.csv | tr -d '\r')
+IFS=, read -r id seed out <<< "$row"; [[ "$id" == "$i" ]] || exit 2
+mkdir -p "$out"; [[ ! -e "$out/driven.json" && ! -e "$out/projector.json" ]] || exit 2
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export PFQMC_BIN_RECORDS_PATH="$out/bin_records.csv"
+export PFQMC_CODE_VERSION="$(git rev-parse --verify HEAD 2>/dev/null || printf source-tree-no-git)"
+../projector_kitaev/projector_driver 6 2 4 .1 2 1 0 1 0 "$seed" 30 300 1 >"$out/projector.json" 2>"$out/projector.stderr"
+./driven_driver 6 2 2 1 2 4 .1 1 0 1 30 300 "$seed" >"$out/driven.json" 2>"$out/driven.stderr"
+printf 'status=complete\njob_id=%s\n' "${PBS_JOBID:-unknown}" >"$out/status.txt"

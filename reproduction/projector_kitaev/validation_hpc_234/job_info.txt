@@ -1,0 +1,5 @@
+planned trotter=36 autocorr=6 benchmark=96
+
+PBS jobs submitted: trotter=153382[].mgt, autocorr=153383[].mgt, benchmark=153384[].mgt
+Completed: 138/138 QMC; same-contour ED: 8/8.
+Executable: validation/projector_bins_driver (guard OFF, stabilization=10, direct sign check=20).

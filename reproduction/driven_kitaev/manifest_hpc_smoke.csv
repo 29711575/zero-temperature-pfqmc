@@ -1,0 +1,7 @@
+task_id,L,V0,Vf,drive_rate,theta_init,beta_trial,dt,delta,mu,boundary,burn,measurements,seed,output_dir
+0,6,0,4,2,6,8,0.1,1,0,1,100,500,930201,results/hpc_smoke/runs/task_000_R2_s930201
+1,6,0,4,2,6,8,0.1,1,0,1,100,500,930202,results/hpc_smoke/runs/task_001_R2_s930202
+2,6,0,4,1,6,8,0.1,1,0,1,100,500,930101,results/hpc_smoke/runs/task_002_R1_s930101
+3,6,0,4,1,6,8,0.1,1,0,1,100,500,930102,results/hpc_smoke/runs/task_003_R1_s930102
+4,6,0,4,0.5,6,8,0.1,1,0,1,100,500,930051,results/hpc_smoke/runs/task_004_R05_s930051
+5,6,0,4,0.5,6,8,0.1,1,0,1,100,500,930052,results/hpc_smoke/runs/task_005_R05_s930052
