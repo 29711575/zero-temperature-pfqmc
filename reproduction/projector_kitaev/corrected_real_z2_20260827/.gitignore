@@ -2,6 +2,11 @@ results/
 spot_checks/
 smoke_archive*/
 partial_snapshot_*/
+REAL_Z2_ARCHIVED_DATA_PARTIAL_REPORT.md
+partial_per_seed.csv
+partial_changed_seeds.csv
+partial_completed_cells.csv
+partial_qc_summary.csv
 *.o[0-9]*
 *.e[0-9]*
 corrected_per_seed.csv
