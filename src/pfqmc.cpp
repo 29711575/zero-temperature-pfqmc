@@ -29,7 +29,7 @@ bool leftRecoveryFinite(const MatType &green)
 }
 
 PfQMC::PfQMC(Spinless_tV *walker, int _stb, PfQMCSignMode mode,
-             std::function<int(const std::vector<Operator *> &)> z2_oracle)
+             std::function<MpZ2Result(const std::vector<Operator *> &)> z2_oracle)
 {
     if (walker == nullptr) {
         throw std::invalid_argument("PfQMC requires a non-null walker");
@@ -80,10 +80,14 @@ PfQMC::PfQMC(Spinless_tV *walker, int _stb, PfQMCSignMode mode,
             ++raw_sign_untrusted_count;
             if (!initial_z2_oracle)
                 throw std::runtime_error("real-Z2 initialization requires an oracle when raw sign is untrusted");
-            z2_sign = initial_z2_oracle(op_array);
+            const MpZ2Result oracleResult = initial_z2_oracle(op_array);
             ++mp_oracle_adjudication_count;
-            if (z2_sign != -1 && z2_sign != 1)
-                throw std::runtime_error("real-Z2 initialization oracle returned a non-Z2 value");
+            recordMpZ2Result(oracleResult);
+            if (!oracleResult.trusted())
+                throw std::runtime_error(
+                    std::string("real-Z2 initialization oracle is not trusted: ") +
+                    mpZ2StatusName(oracleResult.status) + ": " + oracleResult.message);
+            z2_sign = oracleResult.z2;
         }
     }
 }
@@ -99,20 +103,13 @@ void PfQMC::updatePhysicalZ2(const DataType &phaseFactor)
         throw std::runtime_error("real-Z2 update received a nonfinite/zero phase factor");
     const double reality = std::abs(phaseFactor.imag()) / std::max(std::abs(phaseFactor.real()), 1e-300);
     if (!std::isfinite(reality) || reality > 1e-8 || std::abs(phaseFactor.real()) < 1e-12) {
-        if (!initial_z2_oracle) {
-            std::ostringstream message;
-            message << std::setprecision(17)
-                    << "real-Z2 update received a significantly complex/indeterminate ratio: real="
-                    << phaseFactor.real() << "; imag=" << phaseFactor.imag()
-                    << "; imag_over_real=" << reality;
-            throw std::runtime_error(message.str());
-        }
-        z2_sign=initial_z2_oracle(op_array);
-        ++mp_oracle_adjudication_count;
-        last_z2_update_used_oracle=true;
-        last_mp_oracle_z2=z2_sign;
-        if(z2_sign!=-1&&z2_sign!=1)throw std::runtime_error("real-Z2 update oracle returned a non-Z2 value");
-        return;
+        std::ostringstream message;
+        message << std::setprecision(17)
+                << "real-Z2 update received a significantly complex/indeterminate ratio: real="
+                << phaseFactor.real() << "; imag=" << phaseFactor.imag()
+                << "; imag_over_real=" << reality
+                << "; fail-closed without mutating transported Z2";
+        throw std::runtime_error(message.str());
     }
     if (phaseFactor.real() < 0.0) z2_sign = -z2_sign;
 }
@@ -265,10 +262,12 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
             if (captured_z2_oracle_used != nullptr || captured_oracle_z2 != nullptr) {
                 if (!realZ2Mode() || !initial_z2_oracle)
                     throw std::runtime_error("capture Z2 adjudication requires real-Z2 mode and an oracle");
-                const int oracleZ2=initial_z2_oracle(op_array);
+                const MpZ2Result oracleResult=initial_z2_oracle(op_array);
                 ++mp_oracle_adjudication_count;
-                if (oracleZ2!=z2_sign)
-                    throw std::runtime_error("hard diagnostic failure: center MP oracle disagrees with transported physical Z2");
+                recordMpZ2Result(oracleResult);
+                const int oracleZ2=oracleResult.z2;
+                if (oracleZ2!=0 && oracleZ2!=z2_sign)
+                    ++mp_candidate_mismatch_count;
                 if (captured_z2_oracle_used != nullptr) *captured_z2_oracle_used=true;
                 if (captured_oracle_z2 != nullptr) *captured_oracle_z2=oracleZ2;
             }
@@ -533,8 +532,13 @@ PfaffianResult PfQMC::checkRawSignReadOnly()
     if (rawZ2 == z2_sign) return raw;
     if (!initial_z2_oracle)
         throw std::runtime_error("trusted raw/transported Z2 mismatch requires an adjudication oracle");
-    const int oracleZ2 = initial_z2_oracle(op_array);
+    const MpZ2Result oracleResult = initial_z2_oracle(op_array);
     ++mp_oracle_adjudication_count;
+    recordMpZ2Result(oracleResult);
+    const int oracleZ2 = oracleResult.z2;
+    if (oracleZ2 != 0 && oracleZ2 != z2_sign)
+        ++mp_candidate_mismatch_count;
+    if (!oracleResult.trusted()) return raw;
     if (oracleZ2 == z2_sign) {
         ++raw_sign_mismatch_count;
         return raw;

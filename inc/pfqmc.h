@@ -24,6 +24,44 @@ struct LeftGreenRecoveryEvent
 
 enum class PfQMCSignMode { generic_complex, real_z2 };
 
+enum class MpZ2Status {
+    trusted,
+    untrusted_precision,
+    untrusted_reality,
+    untrusted_condition,
+    unavailable
+};
+
+inline const char *mpZ2StatusName(MpZ2Status status)
+{
+    switch (status) {
+    case MpZ2Status::trusted: return "trusted";
+    case MpZ2Status::untrusted_precision: return "untrusted_precision";
+    case MpZ2Status::untrusted_reality: return "untrusted_reality";
+    case MpZ2Status::untrusted_condition: return "untrusted_condition";
+    case MpZ2Status::unavailable: return "unavailable";
+    }
+    return "unavailable";
+}
+
+struct MpZ2Result {
+    int z2 = 0;
+    MpZ2Status status = MpZ2Status::unavailable;
+    int precision_digits = 0;
+    bool canonical_order = false;
+    bool converged = false;
+    double reality_error = std::numeric_limits<double>::infinity();
+    double residual_or_condition = std::numeric_limits<double>::infinity();
+    int precision_escalations = 0;
+    std::string message;
+
+    bool trusted() const
+    {
+        return status == MpZ2Status::trusted && converged &&
+               canonical_order && (z2 == -1 || z2 == 1);
+    }
+};
+
 class PfQMC
 {
 public:
@@ -44,10 +82,18 @@ public:
     long long raw_sign_untrusted_count = 0;
     long long raw_sign_mismatch_count = 0;
     long long mp_oracle_adjudication_count = 0;
+    long long mp_trusted_count = 0;
+    long long mp_untrusted_count = 0;
+    long long mp_precision_escalation_count = 0;
+    int mp_max_precision_digits = 0;
+    long long mp_candidate_mismatch_count = 0;
+    long long mp_correction_count = 0;
+    const bool mp_checkpoint_mutating = false;
     double max_complex_phase_imag = 0.0;
     bool last_z2_update_used_oracle = false;
     int last_mp_oracle_z2 = 0;
-    std::function<int(const std::vector<Operator *> &)> initial_z2_oracle;
+    std::function<MpZ2Result(const std::vector<Operator *> &)> initial_z2_oracle;
+    MpZ2Result last_mp_result;
 
     // Off by default so legacy/static callers retain the original update()
     // path bit-for-bit.  The driven driver enables this explicitly.
@@ -81,11 +127,22 @@ public:
 
     PfQMC(Spinless_tV *walker, int _stb = 10,
           PfQMCSignMode mode = PfQMCSignMode::generic_complex,
-          std::function<int(const std::vector<Operator *> &)> z2_oracle = {});
+          std::function<MpZ2Result(const std::vector<Operator *> &)> z2_oracle = {});
 
     bool realZ2Mode() const { return sign_mode == PfQMCSignMode::real_z2; }
     int physicalZ2Sign() const { return realZ2Mode() ? z2_sign : (sign.real() >= 0.0 ? 1 : -1); }
     DataType diagnosticComplexPhase() const { return sign; }
+
+    void recordMpZ2Result(const MpZ2Result &result)
+    {
+        last_mp_result = result;
+        last_mp_oracle_z2 = result.z2;
+        mp_max_precision_digits = std::max(mp_max_precision_digits,
+                                           result.precision_digits);
+        mp_precision_escalation_count += result.precision_escalations;
+        if (result.trusted()) ++mp_trusted_count;
+        else ++mp_untrusted_count;
+    }
 
     void configureAdaptiveGuard(bool enabled, double threshold,
                                 double ratio_upper = 100.0)

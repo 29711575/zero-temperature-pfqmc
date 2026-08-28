@@ -84,7 +84,16 @@ inline void projectorJsonBuildProvenance(std::ostream &out, const PfQMC &qmc)
         << ",\"raw_sign_trusted_count\":" << qmc.raw_sign_trusted_count
         << ",\"raw_sign_untrusted_count\":" << qmc.raw_sign_untrusted_count
         << ",\"raw_sign_mismatch_count\":" << qmc.raw_sign_mismatch_count
-        << ",\"mp_oracle_adjudication_count\":" << qmc.mp_oracle_adjudication_count;
+        << ",\"mp_oracle_adjudication_count\":" << qmc.mp_oracle_adjudication_count
+        << ",\"mp_checkpoint_mutating\":false"
+        << ",\"mp_trusted_count\":" << qmc.mp_trusted_count
+        << ",\"mp_untrusted_count\":" << qmc.mp_untrusted_count
+        << ",\"mp_precision_escalation_count\":" << qmc.mp_precision_escalation_count
+        << ",\"mp_max_precision_digits\":" << qmc.mp_max_precision_digits
+        << ",\"mp_candidate_mismatch_count\":" << qmc.mp_candidate_mismatch_count
+        << ",\"mp_correction_count\":" << qmc.mp_correction_count
+        << ",\"mp_canonical_order\":true"
+        << ",\"real_z2_policy\":\"transported_ratio_z2_mp_record_only\"";
 #ifdef PFQMC_SOURCE_COMMIT
     out << ",\"source_commit\":\"" << PFQMC_SOURCE_COMMIT << "\"";
 #else

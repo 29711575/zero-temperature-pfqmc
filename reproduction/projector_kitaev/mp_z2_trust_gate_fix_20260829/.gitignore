@@ -1,0 +1,11 @@
+/bin/
+/results/
+/logs/
+/core_build/
+/regression_results/
+/executable_sha256.txt
+/build_provenance.txt
+/submitted_jobs.txt
+/*.out
+/*.err
+
