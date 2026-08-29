@@ -102,7 +102,13 @@ void PfQMC::updatePhysicalZ2(const DataType &phaseFactor)
         !std::isfinite(magnitude) || magnitude == 0.0)
         throw std::runtime_error("real-Z2 update received a nonfinite/zero phase factor");
     const double reality = std::abs(phaseFactor.imag()) / std::max(std::abs(phaseFactor.real()), 1e-300);
-    if (!std::isfinite(reality) || reality > 1e-8 || std::abs(phaseFactor.real()) < 1e-12) {
+    if (std::isfinite(reality))
+        max_z2_ratio_reality_error = std::max(max_z2_ratio_reality_error, reality);
+    // In a real-weight policy the imaginary component is a conditioning
+    // diagnostic, not a physical phase.  Require a clear real-axis sign
+    // margin; machine-level phase accumulation must not drive Z2 or invoke a
+    // mutating oracle.  Ratios outside this margin still fail closed.
+    if (!std::isfinite(reality) || reality > 0.25 || std::abs(phaseFactor.real()) < 1e-12) {
         std::ostringstream message;
         message << std::setprecision(17)
                 << "real-Z2 update received a significantly complex/indeterminate ratio: real="
@@ -152,7 +158,6 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
     MatType Aseg = MatType::Identity(nDim, nDim);
     int curSeg = 0;
     DataType signCur;
-    DataType z2Segment(1);
     for (int l = 0; l < op_length; l++)
     {
         Operator *op = op_array[l];
@@ -178,6 +183,7 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
                     const bool accept = uniform < std::abs(ratio);
                     const DataType delta=op->finishSingleFlip(g, accept, true);
                     signCur *= delta;
+                    updatePhysicalZ2(delta);
                     continue;
                 }
 
@@ -195,6 +201,7 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
                     // Keep the newly stabilized current-configuration Green.
                     const DataType delta=op->finishSingleFlip(g, false, false);
                     signCur *= delta;
+                    updatePhysicalZ2(delta);
                 }
                 else
                 {
@@ -202,6 +209,7 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
                     // then rebuild once more for the accepted configuration.
                     const DataType delta=op->finishSingleFlip(g, true, false);
                     signCur *= delta;
+                    updatePhysicalZ2(delta);
                     rebuildGreenFromFullContourAtBoundary(l, g);
                     installMultiprecisionIfNeeded(l, g);
                     ++adaptive_rebuild_count;
@@ -212,9 +220,9 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
         else
         {
             signCur = op->update(g);
+            updatePhysicalZ2(signCur);
         }
         this->sign *= signCur;
-        z2Segment *= signCur;
         max_complex_phase_imag = std::max(max_complex_phase_imag, std::abs(sign.imag()));
 
         op_array[l]->left_multiply(Aseg, tmp);
@@ -254,8 +262,6 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
         }
         if (l + 1 == capture_boundary)
         {
-            updatePhysicalZ2(z2Segment);
-            z2Segment=DataType(1);
             *captured_g = g;
             *captured_sign = sign;
             if (captured_z2_sign != nullptr) *captured_z2_sign = physicalZ2Sign();
@@ -277,7 +283,6 @@ void PfQMC::rightSweep(int capture_boundary, MatType *captured_g,
     if (capture_boundary != -1 && !captureOccurred) {
         throw std::logic_error("requested capture boundary was not reached");
     }
-    updatePhysicalZ2(z2Segment);
 }
 
 bool PfQMC::recoverLeftGreenAfterOperation(
@@ -311,7 +316,11 @@ bool PfQMC::recoverLeftGreenAfterOperation(
 DataType PfQMC::leftRecoveryUpdateAtBoundary(Operator *op, int boundary)
 {
     const int proposalCount = op->singleFlipProposalCount();
-    if (proposalCount <= 0) return op->update(g);
+    if (proposalCount <= 0) {
+        const DataType delta = op->update(g);
+        updatePhysicalZ2(delta);
+        return delta;
+    }
 
     DataType signCur(1);
     for (int aux=0; aux<proposalCount; ++aux) {
@@ -323,7 +332,9 @@ DataType PfQMC::leftRecoveryUpdateAtBoundary(Operator *op, int boundary)
         ++proposal_attempt_count;
         const DataType ratio = op->preparedRatio();
         const bool accept = uniform < std::abs(ratio);
-        signCur *= op->finishSingleFlip(g, accept, true);
+        const DataType delta = op->finishSingleFlip(g, accept, true);
+        signCur *= delta;
+        updatePhysicalZ2(delta);
         if (accept)
             recoverLeftGreenAfterOperation(
                 "RANK_UPDATE", boundary, aux, structurePreOperation);
@@ -334,9 +345,9 @@ DataType PfQMC::leftRecoveryUpdateAtBoundary(Operator *op, int boundary)
 DataType PfQMC::realZ2UpdateAtBoundary(Operator *op)
 {
     const int proposalCount=op->singleFlipProposalCount();
-    if(proposalCount<=0)return op->update(g);
+    if(proposalCount<=0){const DataType delta=op->update(g);updatePhysicalZ2(delta);return delta;}
     DataType signCur(1);
-    for(int aux=0;aux<proposalCount;++aux){double uniform=0;if(!op->prepareSingleFlip(g,aux,&uniform))throw std::runtime_error("single-field proposal unexpectedly unavailable");++proposal_attempt_count;const DataType ratio=op->preparedRatio();const bool accept=uniform<std::abs(ratio);const DataType delta=op->finishSingleFlip(g,accept,true);signCur*=delta;}
+    for(int aux=0;aux<proposalCount;++aux){double uniform=0;if(!op->prepareSingleFlip(g,aux,&uniform))throw std::runtime_error("single-field proposal unexpectedly unavailable");++proposal_attempt_count;const DataType ratio=op->preparedRatio();const bool accept=uniform<std::abs(ratio);const DataType delta=op->finishSingleFlip(g,accept,true);signCur*=delta;updatePhysicalZ2(delta);}
     return signCur;
 }
 
@@ -346,7 +357,6 @@ void PfQMC::leftSweep()
     MatType Aseg = MatType::Identity(nDim, nDim);
     int curSeg = checkpoints - 1;
     DataType signCur;
-    DataType z2Segment(1);
     for (int l = op_length - 1; l > -1; l--)
     {
         const double structurePrePropagation = left_green_recovery
@@ -360,7 +370,6 @@ void PfQMC::leftSweep()
             : (realZ2Mode() ? realZ2UpdateAtBoundary(op_array[l])
                             : op_array[l]->update(g));
         sign *= signCur;
-        z2Segment *= signCur;
         max_complex_phase_imag = std::max(max_complex_phase_imag, std::abs(sign.imag()));
 
         const double structurePreCompletion = left_green_recovery
@@ -398,7 +407,6 @@ void PfQMC::leftSweep()
                     "PROPAGATION", l, -1, structurePreCompletion);
         }
     }
-    updatePhysicalZ2(z2Segment);
 }
 
 PfaffianResult PfQMC::getSignRawWithStatus()

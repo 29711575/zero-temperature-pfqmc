@@ -1,5 +1,6 @@
 /bin/
 /results/
+/results_v2/
 /logs/
 /core_build/
 /regression_results/
@@ -8,4 +9,3 @@
 /submitted_jobs.txt
 /*.out
 /*.err
-

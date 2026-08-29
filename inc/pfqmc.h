@@ -89,6 +89,7 @@ public:
     long long mp_candidate_mismatch_count = 0;
     long long mp_correction_count = 0;
     const bool mp_checkpoint_mutating = false;
+    double max_z2_ratio_reality_error = 0.0;
     double max_complex_phase_imag = 0.0;
     bool last_z2_update_used_oracle = false;
     int last_mp_oracle_z2 = 0;
