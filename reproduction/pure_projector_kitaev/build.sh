@@ -4,12 +4,12 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 here=$(cd "$(dirname "$0")" && pwd)
 : "${EIGEN3_INCLUDE_DIR:?set EIGEN3_INCLUDE_DIR}"
 : "${PFQMC_PFAPACK_DIR:?set PFQMC_PFAPACK_DIR}"
-build_dir=${PURE_PROJECTOR_BUILD_DIR:-"$here/build"}
+build_dir=${PURE_PROJECTOR_PHASE2_BUILD_DIR:-"$here/build"}
 CXX=${CXX:-mpiicpc}
 mkdir -p "$build_dir"
 "$CXX" -mkl -O2 -std=c++17 -DPFQMC_SCALE_SAFE_UDT \
   -I"$EIGEN3_INCLUDE_DIR" -I"$root/inc" \
-  "$here/phase1_core_test.cpp" "$root/src/skewMatUtils.cpp" \
+  "$here/phase2_core_test.cpp" "$root/src/skewMatUtils.cpp" \
   "$PFQMC_PFAPACK_DIR/c_interface/libcpfapack.a" \
   "$PFQMC_PFAPACK_DIR/fortran/libpfapack.a" \
-  -o "$build_dir/phase1_core_test"
+  -o "$build_dir/phase2_core_test"

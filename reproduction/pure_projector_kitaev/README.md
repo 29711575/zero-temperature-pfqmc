@@ -1,26 +1,10 @@
-# Pure-state projector PfQMC: Phase 1 core
+# Pure-state projector PfQMC Phase 2
 
-This directory contains only the pure Gaussian boundary and equal-time Green
-core. Phase 1 deliberately excludes Monte Carlo sweeps, absolute Pfaffian Z2
-initialization, MP checkpoints, driven evolution, and a complete walker.
+This directory contains only the slow, rebuild-from-scratch correctness oracle.
+It deliberately has no fast Green update, incremental sweep, condition-aware
+ratio, left recovery, MP checkpoint, or production-contour machinery.
 
-The six tests cover analytic one-site states, identity propagation, random pure
-Gaussian constraints, finite-boundary convergence, Kitaev OBC zero-mode/parity
-policy, and direct versus periodically thin-QR-stabilized propagation.
-
-Build with the existing Intel oneAPI/MKL and PFAPACK environment:
-
-```bash
-export EIGEN3_INCLUDE_DIR=/home/sunxr/software/eigen-3.4.0
-export PFQMC_PFAPACK_DIR=/home/sunxr/new-pfqmc-main/inc/pfapack
-export PURE_PROJECTOR_BUILD_DIR=/path/to/external/build
-bash reproduction/pure_projector_kitaev/build.sh
-```
-
-Run the independent groups concurrently:
-
-```bash
-export PURE_PROJECTOR_TEST_OUTPUT_DIR=/path/to/external/results
-export PURE_PROJECTOR_TEST_JOBS=4
-bash reproduction/pure_projector_kitaev/run_tests.sh
-```
+Build with `EIGEN3_INCLUDE_DIR` and `PFQMC_PFAPACK_DIR` set, then run
+`build/phase2_core_test`.  The validation driver added with the implementation
+produces the four review CSV files and gates its final complete JSON on all CSV
+streams being flushed, checked, closed, and checked successfully.
