@@ -1,0 +1,16 @@
+#!/bin/bash
+#PBS -N mpz2_pbc_v3
+#PBS -q workq
+#PBS -J 2-2
+#PBS -l nodes=1:ppn=1
+#PBS -l mem=16gb
+#PBS -l walltime=72:00:00
+#PBS -j oe
+source /etc/profile >/dev/null 2>&1
+module load anaconda3 >/dev/null 2>&1
+set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+base=/home/sunxr/new-pfqmc-fix-mp-z2-trust-gate/reproduction/projector_kitaev/mp_z2_trust_gate_fix_20260829
+export MPZ2_RESULT_ROOT="$base/results_v3"
+exec python3 "$base/run_replay.py" "$PBS_ARRAY_INDEX"
+

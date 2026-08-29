@@ -92,6 +92,7 @@ inline void projectorJsonBuildProvenance(std::ostream &out, const PfQMC &qmc)
         << ",\"mp_max_precision_digits\":" << qmc.mp_max_precision_digits
         << ",\"mp_candidate_mismatch_count\":" << qmc.mp_candidate_mismatch_count
         << ",\"mp_correction_count\":" << qmc.mp_correction_count
+        << ",\"mp_ratio_adjudication_count\":" << qmc.mp_ratio_adjudication_count
         << ",\"max_z2_ratio_reality_error\":" << qmc.max_z2_ratio_reality_error
         << ",\"mp_canonical_order\":true"
         << ",\"real_z2_policy\":\"transported_ratio_z2_mp_record_only\"";

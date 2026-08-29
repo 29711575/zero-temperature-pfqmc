@@ -88,6 +88,7 @@ public:
     int mp_max_precision_digits = 0;
     long long mp_candidate_mismatch_count = 0;
     long long mp_correction_count = 0;
+    long long mp_ratio_adjudication_count = 0;
     const bool mp_checkpoint_mutating = false;
     double max_z2_ratio_reality_error = 0.0;
     double max_complex_phase_imag = 0.0;

@@ -109,13 +109,30 @@ void PfQMC::updatePhysicalZ2(const DataType &phaseFactor)
     // margin; machine-level phase accumulation must not drive Z2 or invoke a
     // mutating oracle.  Ratios outside this margin still fail closed.
     if (!std::isfinite(reality) || reality > 0.25 || std::abs(phaseFactor.real()) < 1e-12) {
-        std::ostringstream message;
-        message << std::setprecision(17)
-                << "real-Z2 update received a significantly complex/indeterminate ratio: real="
-                << phaseFactor.real() << "; imag=" << phaseFactor.imag()
-                << "; imag_over_real=" << reality
-                << "; fail-closed without mutating transported Z2";
-        throw std::runtime_error(message.str());
+        if (!initial_z2_oracle) {
+            std::ostringstream message;
+            message << std::setprecision(17)
+                    << "real-Z2 update received a significantly complex/indeterminate ratio: real="
+                    << phaseFactor.real() << "; imag=" << phaseFactor.imag()
+                    << "; imag_over_real=" << reality
+                    << "; no trusted ratio-adjudication oracle is installed";
+            throw std::runtime_error(message.str());
+        }
+        const MpZ2Result oracleResult = initial_z2_oracle(op_array);
+        ++mp_oracle_adjudication_count;
+        ++mp_ratio_adjudication_count;
+        recordMpZ2Result(oracleResult);
+        last_z2_update_used_oracle = true;
+        last_mp_oracle_z2 = oracleResult.z2;
+        if (!oracleResult.trusted())
+            throw std::runtime_error(
+                std::string("real-Z2 ratio adjudication oracle is not trusted: ") +
+                mpZ2StatusName(oracleResult.status) + ": " + oracleResult.message);
+        // This is the primary update for an indeterminate accepted ratio, not
+        // a periodic checkpoint correction.  The oracle sees the already
+        // accepted post-proposal contour and returns its canonical absolute Z2.
+        z2_sign = oracleResult.z2;
+        return;
     }
     if (phaseFactor.real() < 0.0) z2_sign = -z2_sign;
 }
