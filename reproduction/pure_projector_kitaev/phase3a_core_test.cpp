@@ -111,7 +111,10 @@ void proposalTransactionTest() {
         configuration.locations[i].bond=i%2;
         configuration.locations[i].aux=0;
     }
-    PureProjectorFastWalker walker(trial,configuration,2,PureFastRunMode::AuditLockstep);
+    PureFastOptions fastOptions;
+    fastOptions.weight_mode=PureProjectorWeightMode::GenericComplex;
+    PureProjectorFastWalker walker(
+        trial,configuration,2,PureFastRunMode::AuditLockstep,fastOptions);
     const std::uint64_t before=walker.configurationHash();
     const MatType oldGreen=walker.measurementGreen().green;
     PureFastProposal proposal;
@@ -121,7 +124,13 @@ void proposalTransactionTest() {
     require(result.snapshot.uniform==proposal.uniform,"proposal uniform changed");
     require(result.snapshot.configuration_hash==before,"mutation occurred before decision");
     require(result.ratio.ok(),"trusted single proposal failed");
-    require(result.ratio.relative_reference_error<1e-10,"fast/slow ratio mismatch");
+    if (!(result.ratio.relative_reference_error<1e-10)) {
+        std::cerr << "ratio fast=" << result.ratio.ratio
+                  << " slow=" << result.ratio.slow_ratio
+                  << " rel=" << result.ratio.relative_reference_error
+                  << " rank=" << result.ratio.low_rank << '\n';
+        throw std::runtime_error("fast/slow ratio mismatch");
+    }
     if(!result.accepted) {
         require(walker.configurationHash()==before,"rejected proposal mutated HS");
         require(relativeError(walker.measurementGreen().green,oldGreen)<1e-12,
