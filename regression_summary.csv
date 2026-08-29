@@ -1,0 +1,11 @@
+test,status,details
+normal_dual_stream_exit_and_status,PASS,return=0; status=complete
+normal_single_stream_exit_and_status,PASS,return=0; status=complete
+csv_parseability_row_count_final_newline,PASS,timeseries=31x8; dual_bins=16x5; single_bins=16x5; final_newlines=yes
+trajectory_hash_matches_baseline,PASS,sha256=d0098057730d51e296fb06769671812f6cc5b4abebe6e5729e53d747144b759a
+bin_csv_hash_matches_baseline,PASS,sha256=38dec23be75ffc20d48edc9cc14d7d6120ad8a4681a7b139c01b308fba4e9d5d
+physics_json_matches_baseline,PASS,all physics/provenance fields match (excluding runtime and output path)
+dev_full_bin,PASS,return=2; stdout_complete=no; stderr=retained CSV flush failure for bin-record output: /dev/full
+dev_full_timeseries,PASS,return=2; stdout_complete=no; stderr=retained CSV flush failure for time-series output: /dev/full
+unwritable_bin,PASS,return=2; stdout_complete=no; stderr=cannot open bin-record output
+unwritable_timeseries,PASS,return=2; stdout_complete=no; stderr=cannot open time-series output

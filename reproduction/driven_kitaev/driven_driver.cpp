@@ -155,6 +155,19 @@ std::string codeVersion() {
     return "source-tree-no-git";
 }
 
+std::string finalizeRetainedCsv(std::ofstream &output, const std::string &label,
+                                const std::string &path) {
+    const bool writeFailed = !output;
+    output.flush();
+    const bool flushFailed = !output;
+    output.close();
+    const bool closeFailed = output.fail();
+    if (writeFailed) return "retained CSV write failure for " + label + ": " + path;
+    if (flushFailed) return "retained CSV flush failure for " + label + ": " + path;
+    if (closeFailed) return "retained CSV close failure for " + label + ": " + path;
+    return "";
+}
+
 void writeJsonString(std::ostream &out, const std::string &value) {
     out << '"';
     for (char ch : value) {
@@ -424,6 +437,25 @@ int main(int argc, char **argv) try {
         binRecords << index << ',' << bin.sample_count << ',' << bin.sign_sum << ','
                    << bin.signed_S_pi_numerator << ','
                    << bin.signed_S_pi_dq_numerator << '\n';
+    }
+
+    std::vector<std::string> outputErrors;
+    if (args.ts_stride > 0) {
+        const std::string error =
+            finalizeRetainedCsv(timeSeries, "time-series output", args.ts_path);
+        if (!error.empty()) outputErrors.push_back(error);
+    }
+    {
+        const std::string error =
+            finalizeRetainedCsv(binRecords, "bin-record output", binsPath);
+        if (!error.empty()) outputErrors.push_back(error);
+    }
+    if (!outputErrors.empty()) {
+        std::string message = outputErrors.front();
+        for (size_t index = 1; index < outputErrors.size(); ++index) {
+            message += "; " + outputErrors[index];
+        }
+        throw std::runtime_error(message);
     }
 
     const bool zeroAverageSign = finiteSamples &&
