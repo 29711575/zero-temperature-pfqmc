@@ -1,0 +1,7 @@
+seed,precision_digits,cyclic_cuts_tested,plus_count,minus_count,boundary_dependent,expected_z2,status
+2126263300,160,6,3,3,true,1,untrusted_precision
+2126263300,320,6,6,0,false,1,converged_candidate
+2126263300,640,6,6,0,false,1,trusted_after_320_640_agreement
+2126263301,160,6,3,3,true,1,untrusted_precision
+2126263301,320,6,6,0,false,1,converged_candidate
+2126263301,640,6,6,0,false,1,trusted_after_320_640_agreement

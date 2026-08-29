@@ -1,0 +1,4 @@
+seed,L,theta,V,boundary,hs_scheme,legacy_sign,old_mutating_physical_z2,new_physical_z2,trajectory_hash,expected_trajectory_hash,trajectory_pass,mp_correction_count
+2126263300,18,18,6,OBC,hs1,1.0,0.3835,1.0,15327981045417443903,15327981045417443903,true,0
+2126263301,18,18,6,OBC,hs1,1.0,-0.132,1.0,13371711042269198964,13371711042269198964,true,0
+1926155102,6,12,4,PBC,hs0,-0.3985,0.3985,0.3985,13619898121706317856,13619898121706317856,true,0

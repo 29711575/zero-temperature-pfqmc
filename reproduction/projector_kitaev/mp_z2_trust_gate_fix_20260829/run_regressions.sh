@@ -2,7 +2,11 @@
 set -euo pipefail
 base=$(cd "$(dirname "$0")" && pwd); out=${1:?output directory required}; mkdir -p "$out"
 export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
-set +u; source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null; set -u
+if [[ ${SETVARS_COMPLETED:-0} != 1 ]]; then
+  set +u
+  source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+  set -u
+fi
 "$base/bin/generic_complex_regression" > "$out/generic_complex.json"
 "$base/core_build/bin/sign_interface_hardening" > "$out/sign_interface.json"
 "$base/core_build/bin/local_update_property" 4 1 1 2 990 10 .2 .4 "$out/local_flips.csv" > "$out/local_flips.json"
@@ -31,4 +35,3 @@ with (p/'regression_summary.csv').open('w',newline='') as f:
  w=csv.writer(f);w.writerow(('test','status'));w.writerows(rows)
 print('regressions=PASS')
 PY
-

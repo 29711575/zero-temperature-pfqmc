@@ -1,0 +1,4 @@
+production	0c2df511dff146eb15c9cf395c1f54863422ea9e	Make MP Z2 checkpoints trusted and record-only
+production	89809695c0dea7cb725a0645a0a48bd2f84f378b	Update real Z2 per accepted proposal
+production	14969585b0aee9b24b7bf221834041f11d1ca0df	Adjudicate indeterminate accepted Z2 ratios
+scripts-only	0c584c70ba480956c9fd326fbdfe24b4a6b298f4	Submit single-task MP Z2 retries portably

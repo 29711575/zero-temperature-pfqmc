@@ -1,0 +1,16 @@
+Production range: 1fb85ea5fe7aa19b558fd1586674b01f35ef41a9..14969585b0aee9b24b7bf221834041f11d1ca0df
+
+24 files changed, 665 insertions(+), 105 deletions(-)
+
+Core runtime/oracle files:
+ inc/pfqmc.h
+ src/pfqmc.cpp
+ reproduction/projector_kitaev/projector_mp_z2_oracle.h
+ reproduction/projector_kitaev/projector_json.h
+ reproduction/projector_kitaev/real_z2_raw_checker_fix_20260827/projector_mp_z2_oracle.h
+ reproduction/projector_kitaev/real_z2_raw_checker_fix_20260827/projector_json.h
+ reproduction/projector_kitaev/real_z2_raw_checker_fix_20260827/projector_real_z2_driver.cpp
+ reproduction/projector_kitaev/mp_z2_trust_gate_fix_20260829/validation_oracle_driver.cpp
+
+Script-only commit 0c584c70ba480956c9fd326fbdfe24b4a6b298f4:
+ 2 files changed, 2 insertions(+), 6 deletions(-)
