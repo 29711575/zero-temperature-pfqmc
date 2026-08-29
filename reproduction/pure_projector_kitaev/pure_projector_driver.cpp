@@ -1,0 +1,247 @@
+#include <algorithm>
+#include <cmath>
+#include <complex>
+#include <cstdlib>
+#include <cstdint>
+#include <cstring>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <memory>
+#include <random>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "kitaevChain.h"
+#include "pure_projector_fast.h"
+
+namespace {
+
+constexpr double kPi=3.141592653589793238462643383279502884;
+
+struct Parameters {
+    int L=0,boundary=-1,hs=-1,trial_parity=0,burn=0,measurements=0,block=0;
+    double V=0,t=1,delta=0,mu=0,theta=0,dt=0;
+    double trial_t=1,trial_delta=0,trial_mu=0,edge_splitting=0;
+    std::uint64_t seed=0,audit_interval=0;
+    std::string retained="off",source_commit="unknown",executable_sha256="unknown";
+    std::string walker_mode="fast-strict";
+};
+
+std::string jsonEscape(const std::string&s){std::ostringstream o;for(unsigned char c:s){
+    if(c=='"'||c=='\\')o<<'\\'<<c;else if(c=='\n')o<<"\\n";else if(c<32)o<<"?";else o<<c;}return o.str();}
+
+Parameters parse(int argc,char**argv){
+    std::map<std::string,std::string> values;
+    for(int i=1;i<argc;++i){std::string key=argv[i];if(key.rfind("--",0)!=0||i+1>=argc)
+        throw std::invalid_argument("arguments must be --name value pairs");values[key.substr(2)]=argv[++i];}
+    auto get=[&](const char*k)->std::string{auto it=values.find(k);if(it==values.end())
+        throw std::invalid_argument(std::string("missing --")+k);return it->second;};
+    // Reject odd periodic rings before requiring the remaining configuration;
+    // this is also a cheap fail-fast contract probe.
+    if(values.count("L")&&values.count("boundary")&&std::stoi(values["L"])%2&&
+       (values["boundary"]=="pbc"||values["boundary"]=="0"))
+        throw std::invalid_argument("odd-L PBC is unsupported");
+    Parameters p;p.L=std::stoi(get("L"));p.V=std::stod(get("V"));p.t=std::stod(get("t"));
+    p.delta=std::stod(get("delta"));p.mu=std::stod(get("mu"));p.theta=std::stod(get("theta"));
+    p.dt=std::stod(get("dt"));std::string boundary=get("boundary");
+    p.boundary=boundary=="pbc"||boundary=="0"?0:boundary=="obc"||boundary=="1"?1:-1;
+    std::string hs=get("hs-scheme");p.hs=hs=="hs0"||hs=="0"?0:hs=="hs1"||hs=="1"?1:-1;
+    p.trial_t=std::stod(get("trial-t"));p.trial_delta=std::stod(get("trial-delta"));
+    p.trial_mu=std::stod(get("trial-mu"));p.trial_parity=std::stoi(get("trial-parity"));
+    p.edge_splitting=std::stod(get("edge-splitting"));p.burn=std::stoi(get("burn"));
+    p.measurements=std::stoi(get("measurements"));p.seed=std::stoull(get("seed"));
+    p.block=std::stoi(get("stabilization-block"));p.retained=get("retained");
+    if(values.count("audit-interval"))p.audit_interval=std::stoull(values["audit-interval"]);
+    if(values.count("walker-mode"))p.walker_mode=values["walker-mode"];
+    if(values.count("source-commit"))p.source_commit=values["source-commit"];
+    if(values.count("executable-sha256"))p.executable_sha256=values["executable-sha256"];
+    if(p.L<2||p.boundary<0||p.hs<0||p.dt<=0||p.theta<0||p.V<0||p.burn<0||
+       p.measurements<=0||p.block<=0||(p.trial_parity!=1&&p.trial_parity!=-1)||
+       (p.walker_mode!="fast-strict"&&p.walker_mode!="audit-lockstep"))
+        throw std::invalid_argument("invalid production parameter");
+    double slices=p.theta/p.dt;if(std::abs(slices-std::round(slices))>1e-10*std::max(1.0,slices))
+        throw std::invalid_argument("theta/dt must be integral");
+    return p;
+}
+
+MatType kineticGenerator(int L,int boundary,double t,double delta,double mu){
+    auto matrix=[&](double d,double m){SpinlessTvChainUtils c(L,1,0,2,boundary,d,m,0);
+        MatType h=MatType::Zero(2*L,2*L);c.KineticGenerator(h);return h;};
+    MatType base=matrix(0,0),pair=matrix(1,0)-base,chemical=matrix(0,1)-base;
+    return t*base+delta*pair+mu*chemical;
+}
+
+MatType exponential(MatType generator,double scale){return expm(generator,scale);}
+
+std::pair<int,int> bondCounts(const SpinlessTvChainUtils&c){
+    if(c.boundaryType==0)return {c.Lx/2,c.Lx/2};
+    return {c.Lx/2,(c.Lx-1)/2};
+}
+
+MatType localHsFactor(const SpinlessTvChainUtils&c,int bond,int aux,int sigma){
+    MatType generator=MatType::Zero(c.nDim,c.nDim);double lambda=std::acosh(std::exp(.5*c.V*c.dt));
+    int a,b,d,e;c.aux2MajoranaIdx(aux,0,bond,a,b);c.aux2MajoranaIdx(aux,1,bond,d,e);
+    DataType z(0,lambda*sigma);if(c.hsScheme==0){generator(a,b)=z;generator(b,a)=-z;
+        generator(d,e)=z;generator(e,d)=-z;}else{generator(a,d)=z;generator(d,a)=-z;
+        generator(b,e)=-z;generator(e,b)=z;}return exponential(generator,1.0);
+}
+
+GaussianTrialState makeTrial(const Parameters&p){
+    MatType h=kineticGenerator(p.L,p.boundary,p.trial_t,p.trial_delta,p.trial_mu);
+    if(p.edge_splitting!=0){SpinlessTvChainUtils coordinates(p.L,p.dt,p.V,2,p.boundary,
+            p.trial_delta,p.trial_mu,p.hs);int left=coordinates.majoranaCoord2Idx(0,1);
+        int right=coordinates.majoranaCoord2Idx(p.L-1,1);DataType z(0,p.edge_splitting);
+        h(left,right)+=z;h(right,left)-=z;}
+    GaussianTrialState trial=GaussianTrialState::fromMajoranaHamiltonian(h);
+    int actual=trial.fermionParity();if(actual!=p.trial_parity)
+        throw std::invalid_argument("trial parity does not match explicit trial-parity policy");
+    return trial;
+}
+
+PureFastConfiguration makeContour(const Parameters&p,const SpinlessTvChainUtils&model,
+                                  std::mt19937_64&rng){
+    MatType kinetic=kineticGenerator(p.L,p.boundary,p.t,p.delta,p.mu);
+    MatType half=exponential(kinetic,-.5*p.dt);auto counts=bondCounts(model);
+    int timeSlices=int(std::llround(p.theta/p.dt));std::uniform_int_distribution<int>bit(0,1);
+    auto branch=[&](PureBranch side){PureFastConfiguration out;int ordinal=0;
+        auto push=[&](const MatType&m,int field,int slice,int bond,int aux,const std::string&label){
+            out.slices.emplace_back(m,1.0,label);out.hs_fields.push_back(field);
+            out.locations.push_back({side,slice,ordinal++,bond,aux});};
+        for(int slice=0;slice<timeSlices;++slice){push(half,0,slice,-1,-1,"K/2");
+            for(int layer=0;layer<2;++layer)for(int aux=0;aux<(layer?counts.second:counts.first);++aux){
+                int sigma=bit(rng)?1:-1;push(localHsFactor(model,layer,aux,sigma),sigma,slice,layer,aux,
+                    std::string("V")+std::to_string(layer)+":"+std::to_string(aux));}
+            push(half,0,slice,-1,-1,"K/2");}return out;};
+    PureFastConfiguration ket=branch(PureBranch::Ket),bra=branch(PureBranch::Bra),full=ket;
+    // The flattened bra action order is the strict reverse of its protocol,
+    // including the noncommuting bond-factor order.
+    for(int i=int(bra.slices.size())-1;i>=0;--i){full.slices.push_back(bra.slices[i]);
+        full.hs_fields.push_back(bra.hs_fields[i]);full.locations.push_back(bra.locations[i]);}
+    return full;
+}
+
+std::vector<int> proposalIndices(const PureFastConfiguration&c){std::vector<int> result;
+    for(int i=0;i<int(c.locations.size());++i)if(c.locations[i].aux>=0)result.push_back(i);return result;}
+
+PureFastProposal flip(const SpinlessTvChainUtils&model,const PureFastConfiguration&c,
+                      int index,double uniform){const auto&location=c.locations[index];PureFastProposal p;
+    p.index=index;p.new_hs=-c.hs_fields[index];p.new_factor=localHsFactor(model,location.bond,
+        location.aux,p.new_hs);p.new_eta=1.0;p.uniform=uniform;return p;}
+
+DataType structure(const MatType&g,int L,double q){DataType sum=0;for(int i=0;i<L;++i)for(int j=0;j<L;++j){
+    DataType corr;if(i==j)corr=.25;else{int ai=i,bi=L+i,aj=j,bj=L+j;
+        corr=-.25*(g(ai,bi)*g(aj,bj)-g(ai,aj)*g(bi,bj)+g(ai,bj)*g(bi,aj));}
+    sum+=std::exp(DataType(0,q*(i-j)))*corr;}return sum/double(L);}
+
+DataType energy(const Parameters&p,const MatType&g){auto value=[&](double V,double d,double m){
+    SpinlessTvChainUtils c(p.L,p.dt,V,2,p.boundary,d,m,p.hs);return c.energyFromGreensFunc(g);};
+    DataType base=value(0,0,0);DataType result=p.t*base+p.delta*(value(0,1,0)-base)+
+        p.mu*(value(0,0,1)-base)+(value(p.V,0,0)-base);
+    if(!std::isfinite(result.real())||!std::isfinite(result.imag()))
+        throw std::runtime_error("energy is nonfinite");return result;}
+
+double parity(const SpinlessTvChainUtils&,const MatType&g){MatType skew=DataType(0,-.5)*(g-g.transpose());
+    PfaffianResult pf=signOfPfafWithStatus(skew);DataType value=pf.value;
+    if(!pf.ok()||!std::isfinite(value.real())||!std::isfinite(value.imag())||
+       std::abs(value.imag())>1e-8*std::max(1.0,std::abs(value.real()))||
+       std::abs(std::abs(value.real())-1)>1e-7)
+        throw std::runtime_error("fermion parity is untrusted");return value.real();}
+
+std::uint64_t hashRng(const std::mt19937_64&rng){std::ostringstream state;state<<rng;
+    std::uint64_t h=1469598103934665603ULL;for(unsigned char c:state.str()){h^=c;h*=1099511628211ULL;}return h;}
+
+class RetainedCsv {public:explicit RetainedCsv(const std::string&path):path_(path){if(path!="off"&&path!="-"){
+    enabled_=true;stream_.open(path);if(!stream_)throw std::runtime_error("retained CSV open failed: "+path);
+    stream_<<"measurement,z2,S_pi,S_pi_dq,R_CDW,energy,parity,signed_S_pi,signed_S_pi_dq,signed_energy,signed_parity,acceptance,configuration_hash\n";
+    if(!stream_)throw std::runtime_error("retained CSV header write failed: "+path);}}
+    void row(int i,int z,double spi,double sdq,double r,double e,double parity,double acceptance,std::uint64_t hash){
+        if(!enabled_)return;stream_<<i<<','<<z<<','<<std::setprecision(17)<<spi<<','<<sdq<<','<<r<<','<<e<<','<<parity<<','
+            <<z*spi<<','<<z*sdq<<','<<z*e<<','<<z*parity<<','<<acceptance<<','<<hash<<'\n';
+        if(!stream_)throw std::runtime_error("retained CSV write failed: "+path_);}
+    void finish(){if(!enabled_){finished_=true;return;}stream_.flush();if(!stream_)
+        throw std::runtime_error("retained CSV flush failed: "+path_);stream_.close();if(stream_.fail())
+        throw std::runtime_error("retained CSV close failed: "+path_);finished_=true;}
+    ~RetainedCsv(){if(enabled_&&!finished_&&stream_.is_open())stream_.close();}
+private:std::string path_;std::ofstream stream_;bool enabled_=false,finished_=false;};
+
+double binnedError(const std::vector<double>&x){if(x.size()<2)return 0;std::size_t width=std::max<std::size_t>(1,std::sqrt(x.size()));
+    std::vector<double> bins;for(std::size_t begin=0;begin<x.size();begin+=width){std::size_t end=std::min(x.size(),begin+width);
+        double sum=0;for(std::size_t i=begin;i<end;++i)sum+=x[i];bins.push_back(sum/double(end-begin));}
+    if(bins.size()<2)return 0;double mean=0;for(double v:bins)mean+=v;mean/=bins.size();double variance=0;
+    for(double v:bins)variance+=(v-mean)*(v-mean);return std::sqrt(variance/(bins.size()*(bins.size()-1)));}
+
+void nullable(std::ostream&o,double value,bool resolved){if(resolved&&std::isfinite(value))o<<std::setprecision(17)<<value;else o<<"null";}
+
+} // namespace
+
+int main(int argc,char**argv){try{
+    Parameters p=parse(argc,argv);GaussianTrialState trial=makeTrial(p);
+    SpinlessTvChainUtils model(p.L,p.dt,p.V,2,p.boundary,p.delta,p.mu,p.hs);
+    std::mt19937_64 rng(p.seed);PureFastConfiguration initial=makeContour(p,model,rng);
+    std::vector<int> indices=proposalIndices(initial);if(indices.empty())throw std::runtime_error("contour has no HS proposals");
+    PureFastOptions options;options.weight_mode=PureProjectorWeightMode::RealZ2;
+    options.read_only_audit_interval=p.audit_interval;
+    PureFastRunMode runMode=p.walker_mode=="audit-lockstep"?PureFastRunMode::AuditLockstep:
+        PureFastRunMode::FastStrict;
+    PureProjectorFastWalker walker(trial,std::move(initial),p.block,runMode,options);
+    RetainedCsv retained(p.retained);std::uniform_real_distribution<double>uniform(0,1);
+    long long accepted=0,attempted=0;std::size_t cursor=0;int direction=1;
+    auto step=[&](){indices=proposalIndices(walker.configuration());int index=indices[cursor];
+        if(indices.size()>1){if(direction>0&&cursor+1==indices.size())direction=-1;
+            else if(direction<0&&cursor==0)direction=1;cursor=std::size_t(int(cursor)+direction);}
+        double u=uniform(rng);PureFastProposalResult result=
+            walker.propose(flip(model,walker.configuration(),index,u));++attempted;accepted+=result.accepted;
+        if(result.terminated||!result.ratio.ok())throw std::runtime_error("proposal failed closed");};
+    for(int i=0;i<p.burn;++i)step();
+    double signSum=0,spiNum=0,sdqNum=0,energyNum=0,energyImagNum=0,energyImagMax=0,parityNum=0;std::vector<double> signs;
+    for(int measurement=0;measurement<p.measurements;++measurement){step();auto green=walker.measurementGreen();
+        if(!green.ok())throw std::runtime_error("center Green rebuild failed");int z=walker.z2Sign();
+        double spi=structure(green.green,p.L,kPi).real(),sdq=structure(green.green,p.L,kPi-2*kPi/p.L).real();
+        double r=std::abs(spi)>1e-15?1-sdq/spi:std::numeric_limits<double>::quiet_NaN();
+        DataType complexEnergy=energy(p,green.green);double e=complexEnergy.real(),fparity=parity(model,green.green);
+        energyImagMax=std::max(energyImagMax,std::abs(complexEnergy.imag()));signs.push_back(z);signSum+=z;
+        spiNum+=z*spi;sdqNum+=z*sdq;energyNum+=z*e;energyImagNum+=z*complexEnergy.imag();parityNum+=z*fparity;
+        retained.row(measurement,z,spi,sdq,r,e,fparity,double(accepted)/attempted,walker.configurationHash());}
+    if(const char*forced=std::getenv("PFQMC_TEST_FORCE_ZERO_AVERAGE_SIGN"))if(std::string(forced)=="1")signSum=0;
+    retained.finish(); // completion is forbidden before the retained stream passes write/flush/close checks.
+    const bool resolved=std::abs(signSum)>1e-12;double spi=resolved?spiNum/signSum:0;
+    double sdq=resolved?sdqNum/signSum:0,rcdw=resolved&&std::abs(spi)>1e-15?1-sdq/spi:0;
+    const PureFastDiagnostics&d=walker.diagnostics();
+    std::cout<<std::setprecision(17)<<"{\"status\":\"complete\",\"projector_type\":\"pure_state\","
+        "\"condition_aware_ratio\":false,\"left_recovery\":false,\"mutating_raw_checkpoint\":false,"
+        "\"mutating_mp_checkpoint\":false,\"z2_oracle_correction_count\":0,\"observable_status\":\""
+        <<(resolved?"resolved":"average_sign_too_small")<<"\",\"average_z2\":"<<signSum/p.measurements
+        <<",\"average_z2_bin_error\":"<<binnedError(signs)<<",\"S_pi\":";nullable(std::cout,spi,resolved);
+    std::cout<<",\"S_pi_dq\":";nullable(std::cout,sdq,resolved);std::cout<<",\"R_CDW\":";nullable(std::cout,rcdw,resolved);
+    std::cout<<",\"energy\":";nullable(std::cout,resolved?energyNum/signSum:0,resolved);
+    std::cout<<",\"energy_imaginary\":";nullable(std::cout,resolved?energyImagNum/signSum:0,resolved);
+    std::cout<<",\"fermion_parity\":";nullable(std::cout,resolved?parityNum/signSum:0,resolved);
+    std::cout<<",\"signed_S_pi_numerator\":"<<spiNum<<",\"signed_S_pi_dq_numerator\":"<<sdqNum
+        <<",\"signed_energy_numerator\":"<<energyNum<<",\"signed_parity_numerator\":"<<parityNum
+        <<",\"energy_imaginary_signed_numerator\":"<<energyImagNum
+        <<",\"energy_imaginary_estimator_max\":"<<energyImagMax
+        <<",\"sign_denominator\":"<<signSum<<",\"acceptance\":"<<double(accepted)/attempted
+        <<",\"L\":"<<p.L<<",\"V\":"<<p.V<<",\"t\":"<<p.t<<",\"delta\":"<<p.delta
+        <<",\"mu\":"<<p.mu<<",\"theta\":"<<p.theta<<",\"dt\":"<<p.dt<<",\"boundary\":\""
+        <<(p.boundary?"obc":"pbc")<<"\",\"hs_scheme\":\"hs"<<p.hs<<"\",\"trial_t\":"<<p.trial_t
+        <<",\"trial_delta\":"<<p.trial_delta<<",\"trial_mu\":"<<p.trial_mu
+        <<",\"trial_parity\":"<<p.trial_parity<<",\"edge_splitting\":"<<p.edge_splitting
+        <<",\"burn\":"<<p.burn<<",\"measurements\":"<<p.measurements<<",\"seed\":"<<p.seed
+        <<",\"stabilization_block\":"<<p.block<<",\"audit_interval\":"<<p.audit_interval
+        <<",\"walker_mode\":\""<<p.walker_mode<<"\""
+        <<",\"proposal_schedule\":\"forward_backward\""
+        <<",\"minimum_overlap_rcond\":"<<d.minimum_overlap_rcond
+        <<",\"green_fast_rebuild_relative_error_max\":"<<d.maximum_green_rebuild_error
+        <<",\"ratio_reference_relative_error_max\":"<<d.maximum_ratio_reference_error
+        <<",\"rebuild_count\":"<<d.rebuild_count<<",\"ratio_slow_reference_count\":"<<d.ratio_slow_reference_count
+        <<",\"trust_alarm_count\":"<<d.trust_alarm_count<<",\"slow_reference_failure_count\":"<<d.slow_reference_failure_count
+        <<",\"first_failure_proposal\":"<<d.first_failure_proposal<<",\"final_hs_hash\":"<<walker.configurationHash()
+        <<",\"final_rng_hash\":"<<hashRng(rng)<<",\"source_commit\":\""<<jsonEscape(p.source_commit)
+        <<"\",\"executable_sha256\":\""<<jsonEscape(p.executable_sha256)<<"\"}\n";
+    if(!std::cout)throw std::runtime_error("completion JSON write failed");return 0;
+}catch(const std::exception&e){std::cerr<<"pure_projector_driver: "<<e.what()<<'\n';return 1;}}

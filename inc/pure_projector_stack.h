@@ -60,6 +60,21 @@ public:
     const std::vector<PureProjectorSlice> &slices() const { return slices_; }
     const GaussianTrialState &trial() const { return trial_; }
 
+    bool acceptFactorAtCut(int index,const PureProjectorSlice &replacement,
+                           const MatType &rightBefore) {
+        if(!ok()||index<0||index>=length()||cut_!=index+1||
+           replacement.matrix.rows()!=trial_.Phi.rows()||
+           replacement.matrix.cols()!=trial_.Phi.rows()||
+           rightBefore.rows()!=trial_.Phi.rows()||rightBefore.cols()!=trial_.Phi.cols()||
+           !pureProjectorMatrixFinite(replacement.matrix))return false;
+        slices_[index]=replacement;
+        phi_right_=replacement.matrix*rightBefore;
+        if(!stabilizeCurrent())return false;
+        const PureProjectorGreenResult checked=green();
+        if(!checked.ok()){status_=PureStackStatus::overlap_untrusted;return false;}
+        return true;
+    }
+
     PureProjectorGreenResult green() const {
         return pureProjectorGreenThinQr(phi_right_, phi_left_, options_);
     }
@@ -116,10 +131,13 @@ public:
         --cut_;
         phi_right_.swap(nextRight);
         phi_left_.swap(nextLeft);
-        if ((cut_ % block_size_) == 0 || cut_ == 0) {
-            // Re-anchor endpoint/checkpoint gauges deterministically.  This
-            // makes a forward/backward round trip reproduce the same stored Q.
-            return rebuildAtCut(cut_);
+        if (cut_ == 0) {
+            // Re-anchor the endpoint gauge deterministically so the Phase 3A
+            // round-trip invariant remains exact.
+            return rebuildAtCut(0);
+        }
+        if ((cut_ % block_size_) == 0) {
+            if (!stabilizeCurrent()) return false;
         }
         const PureProjectorGreenResult checked = green();
         if (!checked.ok()) {
@@ -131,6 +149,11 @@ public:
 
     bool forwardToEnd() { return moveToCut(length()); }
     bool backwardToStart() { return moveToCut(0); }
+    bool rebuildCurrent() { return rebuildAtCut(cut_); }
+    bool rebuildToCut(int target) {
+        if(target<0||target>length())return false;
+        return rebuildAtCut(target);
+    }
 
     std::uint64_t configurationHash() const {
         std::uint64_t hash = 1469598103934665603ULL;
@@ -206,23 +229,34 @@ private:
 
     void buildCheckpoints() {
         checkpoints_.clear();
-        for (int cut=0; cut<=length(); cut+=block_size_) {
-            MatType right=trial_.Phi;
-            for(int i=0;i<cut;++i)right=slices_[i].matrix*right;
-            MatType left=trial_.Phi;
-            for(int i=length()-1;i>=cut;--i)left=slices_[i].matrix.adjoint()*left;
-            ThinQrResult qr=thinQrSubspace(right,options_);
-            ThinQrResult ql=thinQrSubspace(left,options_);
-            if(!qr.ok()||!ql.ok()){status_=PureStackStatus::subspace_failure;return;}
-            checkpoints_.push_back({cut,qr.q,ql.q});
+        std::vector<int> cuts;
+        for (int cut=0; cut<=length(); cut+=block_size_) cuts.push_back(cut);
+        if (cuts.empty() || cuts.back()!=length()) cuts.push_back(length());
+        std::vector<MatType> rights(cuts.size()),lefts(cuts.size());
+
+        MatType right=trial_.Phi;
+        std::size_t next=0;
+        for(int cut=0;cut<=length();++cut){
+            if(next<cuts.size()&&cut==cuts[next]){
+                ThinQrResult qr=thinQrSubspace(right,options_);
+                if(!qr.ok()){status_=PureStackStatus::subspace_failure;return;}
+                rights[next]=qr.q;right=qr.q;++next;
+            }
+            if(cut<length())right=slices_[cut].matrix*right;
         }
-        if (checkpoints_.empty() || checkpoints_.back().cut != length()) {
-            MatType right=trial_.Phi;
-            for(const auto &slice:slices_)right=slice.matrix*right;
-            ThinQrResult qr=thinQrSubspace(right,options_);
-            ThinQrResult ql=thinQrSubspace(trial_.Phi,options_);
-            if(qr.ok()&&ql.ok())checkpoints_.push_back({length(),qr.q,ql.q});
+
+        MatType left=trial_.Phi;
+        int previous=int(cuts.size())-1;
+        for(int cut=length();cut>=0;--cut){
+            if(previous>=0&&cut==cuts[previous]){
+                ThinQrResult ql=thinQrSubspace(left,options_);
+                if(!ql.ok()){status_=PureStackStatus::subspace_failure;return;}
+                lefts[previous]=ql.q;left=ql.q;--previous;
+            }
+            if(cut>0)left=slices_[cut-1].matrix.adjoint()*left;
         }
+        for(std::size_t i=0;i<cuts.size();++i)
+            checkpoints_.push_back({cuts[i],rights[i],lefts[i]});
     }
 };
 

@@ -1,0 +1,5 @@
+case,return_code,complete_emitted,parseable,passed,stderr
+normal,0,1,True,1,
+dev_full,1,0,0,1,pure_projector_driver: retained CSV flush failed: /dev/full
+unwritable_path,1,0,0,1,pure_projector_driver: retained CSV open failed: /home/sunxr/pure-state-projector-phase3b/reproduction/pure_projector_kitaev/phase3b_regression
+zero_sign,0,1,1,1,
