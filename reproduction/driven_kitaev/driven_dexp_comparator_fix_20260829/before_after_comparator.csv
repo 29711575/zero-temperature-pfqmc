@@ -1,0 +1,7 @@
+metric,before,after,after_to_before,criterion,status
+max_ratio_complex_abs_error,735.16294625667194,5.7633405722517015e-06,7.8395416983373245e-09,"after <= 10*max(after Green error,1e-14)",PASS
+max_ratio_magnitude_abs_error,735.16294625667194,6.0568731896637473e-07,8.2388172860239264e-10,"after <= 10*max(after Green error,1e-14)",PASS
+max_green_abs_error,2.2790998949061056e-06,2.2790998949061056e-06,1,after unchanged from before (absolute tolerance 1e-15),PASS
+max_udt_solve_residual,210.71238278723098,3.5442400737561756e-14,1.6820274285137807e-16,"after <= 10*max(after Green error,1e-14)",PASS
+max_udt_core_condition,12197.01250073357,2560.6821160484883,0.20994338702977308,diagnostic only; exponent-aware scaled core,PASS
+max_udt_d_spread,1.9978317971527826,4.8590438324853841e+93,2.4321586228681855e+93,diagnostic only; after is full D*2^Dexp spread,PASS

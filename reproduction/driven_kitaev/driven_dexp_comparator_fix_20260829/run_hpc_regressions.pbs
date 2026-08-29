@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#PBS -N driven_dexp_cmp
+#PBS -q workq
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -o comparator_pathological.pbs.log
+set -euo pipefail
+cd "${PBS_O_WORKDIR:?}"
+set +u
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null
+set -u
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+root=$(cd ../../.. && pwd)
+test -x ./dexp_comparator_regression
+test -x ./driven_fastupdate_check_before
+test -x ./driven_fastupdate_check_fixed
+test -x ./static_contour_compare
+test -x ./driven_driver
+
+./dexp_comparator_regression synthetic_nonzero_dexp.csv > synthetic_nonzero_dexp.stdout 2> synthetic_nonzero_dexp.stderr
+PFQMC_FASTCHECK_L=6 ./driven_fastupdate_check_before 6 .1 300 10 pathological_before_trace.csv \
+  > pathological_before.json 2> pathological_before.stderr
+PFQMC_FASTCHECK_L=6 ./driven_fastupdate_check_fixed 6 .1 300 10 pathological_fixed_trace.csv \
+  > pathological_fixed.json 2> pathological_fixed.stderr
+./static_contour_compare 2 > static_comparison.json 2> static_comparison.stderr
+export PFQMC_BIN_RECORDS_PATH="$PWD/driven_smoke_bin_records.csv"
+export PFQMC_CODE_VERSION="$(cd "$root" && git rev-parse HEAD 2>/dev/null || printf source-tree-no-git)"
+./driven_driver 4 0 .2 2 .2 .2 .1 1 0 1 1 30 4242 \
+  > driven_smoke.json 2> driven_smoke.stderr
+sha256sum dexp_comparator_regression driven_fastupdate_check_before \
+  driven_fastupdate_check_fixed static_contour_compare driven_driver \
+  > executable_sha256.txt
+printf 'status=PASS\njob_id=%s\ncommit=%s\n' "${PBS_JOBID:-unknown}" \
+  "$(cd "$root" && git rev-parse HEAD)" > hpc_status.txt

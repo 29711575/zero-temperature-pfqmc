@@ -12,6 +12,7 @@
 #include "kitaevChain.h"
 #include "pfqmc.h"
 #include "multiprecision_driven_rebuild.h"
+#include "reproduction/driven_kitaev/driven_comparator_reconstruction.h"
 
 struct DebugWalker:Spinless_tV{
  int center=-1,ntrial=0,ninit=0,nramp=0;std::vector<std::string> region;
@@ -34,15 +35,13 @@ MatType green_at(DebugWalker&w,int target){UDT f(w.nDim);for(int j=0;j<(int)w.op
 struct UltraProxy { double d_spread, core_condition, solve_residual; };
 UltraProxy ultra_proxy_at(DebugWalker&w,int target){
  UDT f(w.nDim);for(int j=0;j<(int)w.op_array.size();++j)w.op_array[(target+j)%w.op_array.size()]->stabilizedLeftMultiply(f);
- double dmin=f.D.minCoeff(),dmax=f.D.maxCoeff();MatType xinv=f.T.inverse();dVecType dpi(f.nDim),dm(f.nDim);
- for(int i=0;i<f.nDim;++i){dpi(i)=1./std::max(f.D(i),1.);dm(i)=std::min(f.D(i),1.);}
- MatType lhs=xinv*dpi.asDiagonal(),core=lhs+f.U*dm.asDiagonal(),g;f.onePlusInv(g);
- Eigen::JacobiSVD<MatType> svd(core);auto sv=svd.singularValues();
- double residual=(g*core-2.*lhs).norm()/std::max(2.*lhs.norm(),std::numeric_limits<double>::min());
- return {dmax/std::max(dmin,std::numeric_limits<double>::min()),sv(0)/std::max(sv(sv.size()-1),std::numeric_limits<double>::min()),residual};
+ DrivenComparatorSystem system=drivenComparatorSystem(f);MatType g=drivenComparatorGreenReconstruction(f);
+ Eigen::JacobiSVD<MatType> svd(system.core);auto sv=svd.singularValues();
+ double residual=(g*system.core-2.*system.left).norm()/std::max(2.*system.left.norm(),std::numeric_limits<double>::min());
+ return {drivenComparatorScaleSpread(f),sv(0)/std::max(sv(sv.size()-1),std::numeric_limits<double>::min()),residual};
 }
 
-std::complex<double> logdet_full(DebugWalker&w){UDT f(w.nDim);for(auto*o:w.op_array)o->stabilizedLeftMultiply(f);dVecType dp(f.nDim),di(f.nDim),dm(f.nDim);for(int i=0;i<f.nDim;++i){dp(i)=std::max(f.D(i),1.);di(i)=1./dp(i);dm(i)=std::min(f.D(i),1.);}MatType m=f.T.inverse()*di.asDiagonal()+f.U*dm.asDiagonal();Eigen::PartialPivLU<MatType>lu(m);auto d=lu.matrixLU().diagonal();std::complex<double> z=lu.permutationP().determinant()<0?std::complex<double>(0,M_PI):0.;for(int i=0;i<d.size();++i)z+=std::log(d(i))+std::log(dp(i));return z;}
+std::complex<double> logdet_full(DebugWalker&w){UDT f(w.nDim);for(auto*o:w.op_array)o->stabilizedLeftMultiply(f);return drivenComparatorLogdet(f);}
 
 DataType ratio_fast(const SpinlessTvChainUtils&c,const SpinlessVOperator&o,const MatType&g,int ia){int a,b,d,e;c.aux2MajoranaIdx(ia,0,o.bondType,a,b);c.aux2MajoranaIdx(ia,1,o.bondType,d,e);double s=(*o.s)(ia);DataType t0=1.-DataType(0,1)*o.thlV*s*g(a,b),t1=1.-DataType(0,1)*o.thlV*s*g(d,e);return o.etaM*(t0*t1+o.thlV*o.thlV*(g(a,d)*g(b,e)-g(b,d)*g(a,e)));}
 

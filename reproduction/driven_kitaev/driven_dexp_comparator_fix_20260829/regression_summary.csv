@@ -1,0 +1,9 @@
+regression,status,value,criterion
+synthetic_nonzero_Dexp_reconstruction,PASS,0,<=1e-15
+comparator_reconstruction_vs_UDT_onePlusInv,PASS,0,<=1e-13
+pathological_ratio_error_scale,PASS,5.7633405722517015e-06,"after <= 10*max(after Green error,1e-14)"
+pathological_proxy_error_scale,PASS,3.5442400737561756e-14,"after <= 10*max(after Green error,1e-14)"
+pathological_Green_trajectory_unchanged,PASS,2.2790998949061056e-06,same as before within absolute tolerance 1e-15
+driven_static_comparison,PASS,0,all *_diff <=1e-13
+driven_smoke,PASS,complete,status=complete
+production_source_unchanged,PASS,none,no src/inc/main/driver diff

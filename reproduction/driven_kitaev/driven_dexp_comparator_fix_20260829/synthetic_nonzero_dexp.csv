@@ -1,0 +1,2 @@
+case,D0,Dexp0,D1,Dexp1,legacy_reconstruction_relative_error,fixed_reconstruction_relative_error,comparator_vs_onePlusInv_relative_error,comparator_vs_direct_relative_error,logdet_abs_error,status
+synthetic_nonzero_dexp,0.5,21,0.5,-19,0.99999952316295548,0,0,0,0,PASS
