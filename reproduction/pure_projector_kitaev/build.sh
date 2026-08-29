@@ -13,3 +13,9 @@ mkdir -p "$build_dir"
   "$PFQMC_PFAPACK_DIR/c_interface/libcpfapack.a" \
   "$PFQMC_PFAPACK_DIR/fortran/libpfapack.a" \
   -o "$build_dir/phase2_core_test"
+"$CXX" -mkl -qopenmp -O2 -std=c++17 -DPFQMC_SCALE_SAFE_UDT \
+  -I"$EIGEN3_INCLUDE_DIR" -I"$root/inc" \
+  "$here/phase2_validation.cpp" "$root/src/skewMatUtils.cpp" \
+  "$PFQMC_PFAPACK_DIR/c_interface/libcpfapack.a" \
+  "$PFQMC_PFAPACK_DIR/fortran/libpfapack.a" \
+  -o "$build_dir/phase2_validation"
