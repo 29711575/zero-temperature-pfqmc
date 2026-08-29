@@ -13,7 +13,7 @@ with (root / "manifest.csv").open("w", newline="") as handle:
         for V in (2, 4, 6):
             for boundary, hs, trial_mu, split in (("pbc", "hs0", 0.3, 0), ("obc", "hs1", 0, 1e-8)):
                 for seed in (700001, 700002):
-                    parity = 1 if boundary == "obc" or L % 4 == 2 else -1
+                    parity = 1 if L % 4 == 2 else -1
                     writer.writerow([task, L, V, boundary, hs, seed + 1000 * L + 10 * int(V), trial_mu, split, parity])
                     task += 1
 assert task == 36

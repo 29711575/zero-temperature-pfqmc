@@ -16,7 +16,7 @@ def record(command, env=None):
 def base(exe, L, boundary, hs, seed, block, retained="off", mode="fast-strict",
          theta="0.4", burn="40", measurements="80", V="0.8", audit="0"):
     zero = boundary == "obc"
-    trial_parity = 1 if zero or L % 4 == 2 else -1
+    trial_parity = 1 if L % 4 == 2 else -1
     return [str(exe), "--L", str(L), "--V", V, "--t", "1", "--delta", "1",
             "--mu", "0", "--theta", theta, "--dt", "0.1", "--boundary", boundary,
             "--hs-scheme", hs, "--trial-t", "1", "--trial-delta", "1",
@@ -116,7 +116,7 @@ def run_ed(exe, ed_exe, out):
         command = [str(ed_exe), "--L", str(L), "--V", "0.5", "--t", "1",
                    "--delta", "1", "--mu", "0", "--boundary", boundary,
                    "--trial-t", "1", "--trial-delta", "1", "--trial-mu", trial_mu,
-                   "--trial-parity", "1" if boundary == "obc" or L % 4 == 2 else "-1",
+                   "--trial-parity", "1" if L % 4 == 2 else "-1",
                    "--edge-splitting", split]
         run, exact = record(command); require_complete(run, exact, "ED oracle")
         for theta in (2, 4, 8, 12):
