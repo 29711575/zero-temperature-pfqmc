@@ -325,7 +325,15 @@ ExactResult enumerate(const SpinlessTvChainUtils &config,
     return result;
 }
 
-struct McResult { DataType sign = 0.0; Observables obs; double acceptance = 0.0; };
+struct McResult {
+    DataType sign = 0.0;
+    Observables obs;
+    double acceptance = 0.0;
+    double minimum_overlap_rcond = std::numeric_limits<double>::infinity();
+    double maximum_overlap_residual = 0.0;
+    PfaffianStatus pfaffian_status = PfaffianStatus::success;
+    long long zero_or_untrusted = 0;
+};
 
 McResult slowMc(const SpinlessTvChainUtils &config, const GaussianTrialState &trial,
                 const cVecType &denseTrial, const std::vector<MatType> &gamma,
@@ -338,6 +346,9 @@ McResult slowMc(const SpinlessTvChainUtils &config, const GaussianTrialState &tr
     std::uniform_real_distribution<double> uniform(0.0, 1.0);
     long long accepted = 0, attempted = 0;
     DataType phaseSum = 0.0, spiSum = 0.0, sdqSum = 0.0;
+    double minimumRcond = current.pf.overlap_rcond;
+    double maximumResidual = current.pf.overlap_residual;
+    PfaffianStatus pfaffianStatus = current.pf.pfaffian_status;
     const int total = burn + samples;
     for (int step = 0; step < total; ++step) {
         const int target = step % fields;
@@ -345,6 +356,10 @@ McResult slowMc(const SpinlessTvChainUtils &config, const GaussianTrialState &tr
         candidateBits[target] *= -1;
         Evaluation candidate = evaluateConfiguration(
             config, trial, denseTrial, gamma, candidateBits);
+        minimumRcond = std::min(minimumRcond, candidate.pf.overlap_rcond);
+        maximumResidual = std::max(maximumResidual, candidate.pf.overlap_residual);
+        if (candidate.pf.pfaffian_status != PfaffianStatus::success)
+            pfaffianStatus = candidate.pf.pfaffian_status;
         const double ratio = std::exp(candidate.pf.log_abs_weight -
                                       current.pf.log_abs_weight);
         const double u = uniform(random);
@@ -367,6 +382,9 @@ McResult slowMc(const SpinlessTvChainUtils &config, const GaussianTrialState &tr
     result.obs.sdq = sdqSum / phaseSum;
     result.obs.rcdw = 1.0 - result.obs.sdq / result.obs.spi;
     result.acceptance = double(accepted) / attempted;
+    result.minimum_overlap_rcond = minimumRcond;
+    result.maximum_overlap_residual = maximumResidual;
+    result.pfaffian_status = pfaffianStatus;
     return result;
 }
 
@@ -437,7 +455,7 @@ void enumerationMcAndEd(CheckedCsv &exactCsv, CheckedCsv &mcCsv, CheckedCsv &edC
                         Metrics &metrics, const std::string &sourceCommit,
                         const std::string &executableSha) {
     exactCsv.stream() << "L,boundary,hs_scheme,configurations,sum_w_real,sum_w_imag,sum_abs,average_sign_real,average_sign_imag,S_pi,S_pi_dq,R_CDW\n";
-    mcCsv.stream() << "seed,projector_type,trial_parity,edge_splitting,source_commit,executable_sha256,average_sign_real,exact_average_sign_real,sign_abs_deviation,S_pi,exact_S_pi,S_pi_abs_deviation,R_CDW,exact_R_CDW,R_CDW_abs_deviation,acceptance,zero_untrusted_proposals\n";
+    mcCsv.stream() << "seed,projector_type,trial_parity,edge_splitting,source_commit,executable_sha256,physical_z2_average_sign,complex_phase_average_imag,exact_average_sign_real,sign_abs_deviation,S_pi,exact_S_pi,S_pi_abs_deviation,S_pi_dq,exact_S_pi_dq,S_pi_dq_abs_deviation,R_CDW,exact_R_CDW,R_CDW_abs_deviation,acceptance,zero_untrusted_proposals,minimum_overlap_rcond,maximum_overlap_residual,pfaffian_status\n";
     edCsv.stream() << "L,boundary,trial_parity,edge_splitting,S_pi_pf,S_pi_ed,S_pi_abs_diff,S_pi_dq_pf,S_pi_dq_ed,S_pi_dq_abs_diff,R_CDW_pf,R_CDW_ed,R_CDW_abs_diff\n";
 
     SpinlessTvChainUtils exactConfig(4, 0.1, 1.3, 2, 1, 0.7, 0.35, 1);
@@ -458,17 +476,23 @@ void enumerationMcAndEd(CheckedCsv &exactCsv, CheckedCsv &mcCsv, CheckedCsv &edC
         McResult mc = slowMc(exactConfig, trial4, dense4, gamma4, seed, 2000, 12000);
         const double ds = std::abs(mc.sign.real() - exact.averageSign.real());
         const double dp = std::abs(mc.obs.spi.real() - exact.observables.spi.real());
+        const double ddq = std::abs(mc.obs.sdq.real() - exact.observables.sdq.real());
         const double dr = std::abs(mc.obs.rcdw.real() - exact.observables.rcdw.real());
         metrics.maxMcSign = std::max(metrics.maxMcSign, ds);
         metrics.maxMcSpi = std::max(metrics.maxMcSpi, dp);
         metrics.maxMcR = std::max(metrics.maxMcR, dr);
         mcCsv.stream() << seed << ",pure_state," << trial4.fermionParity() << ",0,"
                        << sourceCommit << ',' << executableSha << ','
-                       << mc.sign.real() << ',' << exact.averageSign.real()
+                       << mc.sign.real() << ',' << mc.sign.imag() << ','
+                       << exact.averageSign.real()
                        << ',' << ds << ',' << mc.obs.spi.real() << ','
                        << exact.observables.spi.real() << ',' << dp << ','
+                       << mc.obs.sdq.real() << ',' << exact.observables.sdq.real() << ','
+                       << ddq << ','
                        << mc.obs.rcdw.real() << ',' << exact.observables.rcdw.real() << ','
-                       << dr << ',' << mc.acceptance << ",0\n";
+                       << dr << ',' << mc.acceptance << ',' << mc.zero_or_untrusted << ','
+                       << mc.minimum_overlap_rcond << ',' << mc.maximum_overlap_residual << ','
+                       << pfaffianStatusName(mc.pfaffian_status) << '\n';
         require(ds < 0.06 && dp < 0.06 && dr < 0.12, "slow MC exceeds statistical envelope");
     }
     // Reproducibility: the same seed must reproduce every aggregate exactly.
