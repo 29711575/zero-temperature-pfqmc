@@ -1,0 +1,7 @@
+test,status,primary_metric,value
+single_site,PASS,max_analytic_G_error,3.1401849173675498e-16
+identity_propagation,PASS,max_identity_G_error,6.5851099635466118e-16
+random_gaussian,PASS,max_pure_state_invariant_error,8.8998738271776818e-16
+finite_lambda,PASS,lambda24_to_pure_G_error,7.5502493146799674e-11
+kitaev_zero_mode_parity,PASS,max_trial_invariant_error,6.2803698347350997e-16
+propagation_thin_qr,PASS,direct_vs_thin_qr_G_error,2.694123373749838e-15

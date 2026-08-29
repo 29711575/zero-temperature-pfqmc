@@ -110,10 +110,29 @@ void testIdentityPropagation() {
     const double stableError = relativeError(stable.green, trial.G_T);
     require(directError < kTolerance && stableError < kTolerance,
             "identity propagation did not reproduce trial Green");
+    MatType singularLeft = trial.Phi;
+    singularLeft.col(1) = singularLeft.col(0);
+    const PureProjectorGreenResult singularDirect =
+        pureProjectorGreen(trial.Phi, singularLeft);
+    const PureProjectorGreenResult singularStable =
+        pureProjectorGreenThinQr(trial.Phi, singularLeft);
+    require(!singularDirect.ok() && !singularStable.ok(),
+            "singular overlap/subspace did not fail closed");
+    MatType untrustedLeft = trial.Phi;
+    untrustedLeft.col(1) = trial.Phi.col(0) + 1e-12 * trial.Phi.col(1);
+    PureProjectorOptions strictOptions;
+    strictOptions.rank_tolerance = 1e-15;
+    strictOptions.minimum_overlap_rcond = 1e-10;
+    const PureProjectorGreenResult untrusted =
+        pureProjectorGreen(trial.Phi, untrustedLeft, strictOptions);
+    require(untrusted.status == PureProjectorStatus::overlap_ill_conditioned,
+            "untrusted overlap did not fail closed on rcond");
     printResult("identity_propagation",
                 {{"direct_error", directError}, {"thin_qr_error", stableError},
                  {"overlap_rcond", stable.overlap_rcond},
-                 {"solve_residual", stable.solve_residual}});
+                 {"solve_residual", stable.solve_residual},
+                 {"singular_fail_closed", 1.0},
+                 {"untrusted_rcond_fail_closed", 1.0}});
 }
 
 void testRandomGaussian() {
@@ -129,11 +148,28 @@ void testRandomGaussian() {
     }
     require(std::max({maxOrthonormal, maxIsotropic, maxSkew, maxInvolution}) < kTolerance,
             "random Gaussian invariant tolerance exceeded");
+    int invalidRejected = 0;
+    try {
+        MatType invalid = canonicalPhi(2);
+        invalid(0, 0) = 2.0;
+        (void)GaussianTrialState::fromPhi(invalid);
+    } catch (const GaussianTrialStateError &) {
+        ++invalidRejected;
+    }
+    try {
+        MatType nonfinite = canonicalPhi(2);
+        nonfinite(0, 0) = DataType(std::numeric_limits<double>::quiet_NaN(), 0.0);
+        (void)GaussianTrialState::fromPhi(nonfinite);
+    } catch (const GaussianTrialStateError &error) {
+        if (error.code() == GaussianTrialStateStatus::nonfinite_input) ++invalidRejected;
+    }
+    require(invalidRejected == 2, "invalid/nonfinite occupied subspace was accepted");
     printResult("random_gaussian",
                 {{"max_orthonormal_error", maxOrthonormal},
                  {"max_isotropy_error", maxIsotropic},
                  {"max_green_skew_error", maxSkew},
-                 {"max_green_involution_error", maxInvolution}});
+                 {"max_green_involution_error", maxInvolution},
+                 {"invalid_rejected", double(invalidRejected)}});
 }
 
 void testFiniteLambda() {
