@@ -1,0 +1,3 @@
+L,boundary,trial_parity,edge_splitting,S_pi_pf,S_pi_ed,S_pi_abs_diff,S_pi_dq_pf,S_pi_dq_ed,S_pi_dq_abs_diff,R_CDW_pf,R_CDW_ed,R_CDW_abs_diff
+4,0,-1,0,0.25,0.25,5.591e-17,0.25,0.25,6.51901e-17,0,0,1.10055e-16
+6,1,1,1e-08,0.268493,0.268493,1.11112e-16,0.258168,0.258168,5.5528e-17,0.0384573,0.0384573,6.66223e-16
