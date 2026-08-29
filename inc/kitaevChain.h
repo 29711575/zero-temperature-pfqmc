@@ -6,6 +6,7 @@
 #include "spinless_tV.h"
 #include "types.h"
 #include <iostream>
+#include <stdexcept>
 
 class  SpinlessTvChainUtils : public SpinlessTvUtils {
   public:
@@ -18,6 +19,15 @@ class  SpinlessTvChainUtils : public SpinlessTvUtils {
 
     SpinlessTvChainUtils(int _L, double _dt, double _V, int _l, int _boundary, double _delta=0.0, double _mu=0.0, int _hsScheme=0) 
         : SpinlessTvUtils(_L, 1, _dt, _V, _l, _L*2, false, _hsScheme) {
+        // The interaction propagator is split into two non-overlapping bond
+        // layers.  On an odd periodic ring no such two-colouring exists, so
+        // accepting it would silently construct the wrong contour.  Keep this
+        // invariant at the shared model/configuration boundary used by the
+        // finite-temperature, projector, and driven walkers.
+        if (_boundary == 0 && (_L % 2) != 0) {
+            throw std::invalid_argument(
+                "odd-L PBC is unsupported by the two-layer bond decomposition");
+        }
         
         boundaryType = _boundary;
         nsites = _L;
@@ -378,7 +388,8 @@ class  SpinlessTvChainUtils : public SpinlessTvUtils {
 
         int idxi1, idxi2, idxj1, idxj2;
         tmp = (0.25) * V;
-        for (int i = 0; i < Lx-1; i++) {
+        const int interactionBondCount = boundaryType == 0 ? Lx : Lx - 1;
+        for (int i = 0; i < interactionBondCount; i++) {
             idxi1 = majoranaCoord2Idx(i, 0);             // i1
             idxi2 = majoranaCoord2Idx(i, 1);             // i2
             idxj1 = majoranaCoord2Idx((i + 1) % Lx, 0);  // j1

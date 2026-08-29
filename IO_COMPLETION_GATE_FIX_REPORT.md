@@ -45,7 +45,7 @@ changed.
 The reusable regression is
 `reproduction/driven_kitaev/test_io_completion_gate.py`. It compares binaries
 built from the frozen source and the fixed source, and writes
-`regression_summary.csv`.
+`IO_COMPLETION_GATE_REGRESSION_SUMMARY.csv`.
 
 All 10 checks pass:
 
@@ -81,8 +81,8 @@ python3 reproduction/driven_kitaev/test_io_completion_gate.py \
   --driver /home/sunxr/new-pfqmc-fix-retained-io-completion-gate-results/bin/driven_driver_fixed \
   --baseline-driver /home/sunxr/new-pfqmc-fix-retained-io-completion-gate-results/bin/driven_driver_baseline \
   --output-dir /home/sunxr/new-pfqmc-fix-retained-io-completion-gate-results/automated \
-  --summary regression_summary.csv
+  --summary IO_COMPLETION_GATE_REGRESSION_SUMMARY.csv
 ```
 
 The authoritative per-check outcome and diagnostics are in
-`regression_summary.csv`.
+`IO_COMPLETION_GATE_REGRESSION_SUMMARY.csv`.

@@ -1,0 +1,14 @@
+test_id,scope,parameters,expected,result,metric,threshold,status,evidence
+production_commit_0c2df51,provenance,base_4d79bb7,ancestor,ancestor,merge_base_exit,0,PASS,git_merge-base
+production_commit_8980969,provenance,base_4d79bb7,ancestor,ancestor,merge_base_exit,0,PASS,git_merge-base
+production_commit_1496958,provenance,base_4d79bb7,ancestor,ancestor,merge_base_exit,0,PASS,git_merge-base
+odd_L_PBC_shared_config,construction,L3_PBC,direct_rejection,rejected,guard_observed,1,PASS,structural.csv
+odd_L_OBC_finite_T,construction,L3_OBC,constructs,constructed,guard_observed,0,PASS,structural.csv
+odd_L_PBC_projector,entry_guard,L3_PBC,exit_2_with_guard,exit_2_with_guard,exit_code,2,PASS,projector_L3_PBC.stderr
+odd_L_PBC_driven,entry_guard,L3_PBC,exit_2_with_guard,exit_2_with_guard,exit_code,2,PASS,driven_L3_PBC.stderr
+even_L_PBC_B_Binv,operator_regression,L6_PBC_V2,residual_below_tolerance,0,frobenius_residual,1e-12,PASS,structural.csv
+L4_PBC_interaction_energy,direct_Wick,L4_PBC_V2,4_bonds_match,2.341683895620198e-15,relative_error,1e-13,PASS,structural.csv
+L4_OBC_interaction_energy,direct_Wick,L4_OBC_V2,3_bonds_match,8.396944963237188e-16,relative_error,1e-13,PASS,structural.csv
+L6_PBC_right_boundary_Green,Green_regression,L6_PBC_V4_theta2_beta2_dt0.1,finite_and_regression_scale,2.1837046465355791e-10,max_relative_error,1e-8,PASS,boundary_green.json
+observable_paths,diff_audit,S_pi_S_pi_dq_R_CDW_average_sign,no_changes,no_changes,changed_lines,0,PASS,git_diff
+condition_aware_ratio_left_recovery,scope_audit,all,not_enabled_or_run,not_enabled_or_run,enabled,0,PASS,command_audit
