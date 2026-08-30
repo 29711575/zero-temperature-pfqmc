@@ -26,11 +26,13 @@ constexpr double kPi=3.141592653589793238462643383279502884;
 
 struct Parameters {
     int L=0,boundary=-1,hs=-1,trial_parity=0,burn=0,measurements=0,block=0;
+    int measurement_stride=1;
     double V=0,t=1,delta=0,mu=0,theta=0,dt=0;
     double trial_t=1,trial_delta=0,trial_mu=0,edge_splitting=0;
     std::uint64_t seed=0,audit_interval=0;
     std::string retained="off",source_commit="unknown",executable_sha256="unknown";
     std::string walker_mode="fast-strict",initialization_policy="mirrored-theorem";
+    std::string run_units="sweeps";
 };
 
 std::string jsonEscape(const std::string&s){std::ostringstream o;for(unsigned char c:s){
@@ -61,11 +63,15 @@ Parameters parse(int argc,char**argv){
     if(values.count("walker-mode"))p.walker_mode=values["walker-mode"];
     if(values.count("initialization-policy"))
         p.initialization_policy=values["initialization-policy"];
+    if(values.count("run-units"))p.run_units=values["run-units"];
+    if(values.count("measurement-stride"))
+        p.measurement_stride=std::stoi(values["measurement-stride"]);
     if(values.count("source-commit"))p.source_commit=values["source-commit"];
     if(values.count("executable-sha256"))p.executable_sha256=values["executable-sha256"];
     if(p.L<2||p.boundary<0||p.hs<0||p.dt<=0||p.theta<0||p.V<0||p.burn<0||
        p.measurements<=0||p.block<=0||(p.trial_parity!=1&&p.trial_parity!=-1)||
        (p.walker_mode!="fast-strict"&&p.walker_mode!="audit-lockstep")||
+       (p.run_units!="sweeps"&&p.run_units!="proposals")||p.measurement_stride<=0||
        (p.initialization_policy!="mirrored-theorem"&&
         p.initialization_policy!="sequential-audit")||
        (p.initialization_policy=="sequential-audit"&&p.L>6))
@@ -85,8 +91,7 @@ MatType kineticGenerator(int L,int boundary,double t,double delta,double mu){
 MatType exponential(MatType generator,double scale){return expm(generator,scale);}
 
 std::pair<int,int> bondCounts(const SpinlessTvChainUtils&c){
-    if(c.boundaryType==0)return {c.Lx/2,c.Lx/2};
-    return {c.Lx/2,(c.Lx-1)/2};
+    return pureProjectorCheckerboardBondCounts(c.Lx,c.boundaryType);
 }
 
 MatType localHsFactor(const SpinlessTvChainUtils&c,int bond,int aux,int sigma){
@@ -159,11 +164,6 @@ PureFastProposal flip(const SpinlessTvChainUtils&model,const PureFastConfigurati
     p.index=index;p.new_hs=-c.hs_fields[index];p.new_factor=localHsFactor(model,location.bond,
         location.aux,p.new_hs);p.new_eta=1.0;p.uniform=uniform;return p;}
 
-DataType structure(const MatType&g,int L,double q){DataType sum=0;for(int i=0;i<L;++i)for(int j=0;j<L;++j){
-    DataType corr;if(i==j)corr=.25;else{int ai=i,bi=L+i,aj=j,bj=L+j;
-        corr=-.25*(g(ai,bi)*g(aj,bj)-g(ai,aj)*g(bi,bj)+g(ai,bj)*g(bi,aj));}
-    sum+=std::exp(DataType(0,q*(i-j)))*corr;}return sum/double(L);}
-
 DataType energy(const Parameters&p,const MatType&g){auto value=[&](double V,double d,double m){
     SpinlessTvChainUtils c(p.L,p.dt,V,2,p.boundary,d,m,p.hs);return c.energyFromGreensFunc(g);};
     DataType base=value(0,0,0);DataType result=p.t*base+p.delta*(value(0,1,0)-base)+
@@ -171,12 +171,11 @@ DataType energy(const Parameters&p,const MatType&g){auto value=[&](double V,doub
     if(!std::isfinite(result.real())||!std::isfinite(result.imag()))
         throw std::runtime_error("energy is nonfinite");return result;}
 
-double parity(const SpinlessTvChainUtils&,const MatType&g){MatType skew=DataType(0,-.5)*(g-g.transpose());
-    PfaffianResult pf=signOfPfafWithStatus(skew);DataType value=pf.value;
-    if(!pf.ok()||!std::isfinite(value.real())||!std::isfinite(value.imag())||
-       std::abs(value.imag())>1e-8*std::max(1.0,std::abs(value.real()))||
-       std::abs(std::abs(value.real())-1)>1e-7)
-        throw std::runtime_error("fermion parity is untrusted");return value.real();}
+double parity(const SpinlessTvChainUtils&,const MatType&g){
+    const PurePhysicalParityResult result=pureProjectorPhysicalParity(g);
+    if(!result.ok())throw std::runtime_error("physical fermion parity is untrusted");
+    return result.physical_parity;
+}
 
 std::uint64_t hashRng(const std::mt19937_64&rng){std::ostringstream state;state<<rng;
     std::uint64_t h=1469598103934665603ULL;for(unsigned char c:state.str()){h^=c;h*=1099511628211ULL;}return h;}
@@ -208,6 +207,8 @@ void nullable(std::ostream&o,double value,bool resolved){if(resolved&&std::isfin
 int main(int argc,char**argv){try{
     const auto runStarted=std::chrono::steady_clock::now();
     Parameters p=parse(argc,argv);GaussianTrialState trial=makeTrial(p);
+    const PurePhysicalParityResult trialParity=pureProjectorPhysicalParity(trial.G_T);
+    if(!trialParity.ok())throw std::runtime_error("trial physical parity diagnostic failed");
     SpinlessTvChainUtils model(p.L,p.dt,p.V,2,p.boundary,p.delta,p.mu,p.hs);
     std::mt19937_64 rng(p.seed);PureFastConfiguration initial;
     PureFastInitializationPolicy initializationPolicy=
@@ -229,18 +230,28 @@ int main(int argc,char**argv){try{
     PureProjectorFastWalker walker(trial,std::move(initial),p.block,runMode,options,
         initializationPolicy);
     RetainedCsv retained(p.retained);std::uniform_real_distribution<double>uniform(0,1);
-    long long accepted=0,attempted=0;std::size_t cursor=0;int direction=1;
-    auto step=[&](){indices=proposalIndices(walker.configuration());int index=indices[cursor];
-        if(indices.size()>1){if(direction>0&&cursor+1==indices.size())direction=-1;
-            else if(direction<0&&cursor==0)direction=1;cursor=std::size_t(int(cursor)+direction);}
+    long long accepted=0,attempted=0;std::size_t cursor=0;int direction=1,sweepDirection=1;
+    auto proposalStep=[&](int index){
         double u=uniform(rng);PureFastProposalResult result=
             walker.propose(flip(model,walker.configuration(),index,u));++attempted;accepted+=result.accepted;
         if(result.terminated||!result.ratio.ok())throw std::runtime_error("proposal failed closed");};
-    for(int i=0;i<p.burn;++i)step();
+    auto legacyProposalStep=[&](){indices=proposalIndices(walker.configuration());
+        int index=indices[cursor];
+        if(indices.size()>1){if(direction>0&&cursor+1==indices.size())direction=-1;
+            else if(direction<0&&cursor==0)direction=1;cursor=std::size_t(int(cursor)+direction);}
+        proposalStep(index);};
+    auto completeSweep=[&](){indices=proposalIndices(walker.configuration());
+        if(sweepDirection>0){for(int index:indices)proposalStep(index);}
+        else{for(auto it=indices.rbegin();it!=indices.rend();++it)proposalStep(*it);}
+        sweepDirection=-sweepDirection;};
+    auto advance=[&](int count){for(int i=0;i<count;++i){
+        if(p.run_units=="sweeps")completeSweep();else legacyProposalStep();}};
+    advance(p.burn);const long long burnProposals=attempted;
     double signSum=0,spiNum=0,sdqNum=0,energyNum=0,energyImagNum=0,energyImagMax=0,parityNum=0;std::vector<double> signs;
-    for(int measurement=0;measurement<p.measurements;++measurement){step();auto green=walker.measurementGreen();
+    for(int measurement=0;measurement<p.measurements;++measurement){advance(p.measurement_stride);auto green=walker.measurementGreen();
         if(!green.ok())throw std::runtime_error("center Green rebuild failed");int z=walker.z2Sign();
-        double spi=structure(green.green,p.L,kPi).real(),sdq=structure(green.green,p.L,kPi-2*kPi/p.L).real();
+        double spi=pureProjectorStructureFactor(green.green,p.L,kPi).real();
+        double sdq=pureProjectorStructureFactor(green.green,p.L,kPi-2*kPi/p.L).real();
         double r=std::abs(spi)>1e-15?1-sdq/spi:std::numeric_limits<double>::quiet_NaN();
         DataType complexEnergy=energy(p,green.green);double e=complexEnergy.real(),fparity=parity(model,green.green);
         energyImagMax=std::max(energyImagMax,std::abs(complexEnergy.imag()));signs.push_back(z);signSum+=z;
@@ -271,10 +282,25 @@ int main(int argc,char**argv){try{
         <<",\"trial_delta\":"<<p.trial_delta<<",\"trial_mu\":"<<p.trial_mu
         <<",\"trial_parity\":"<<p.trial_parity<<",\"edge_splitting\":"<<p.edge_splitting
         <<",\"burn\":"<<p.burn<<",\"measurements\":"<<p.measurements<<",\"seed\":"<<p.seed
+        <<",\"run_units\":\""<<p.run_units<<"\",\"hs_variable_count\":"<<indices.size()
+        <<",\"burn_proposals\":"<<burnProposals
+        <<",\"burn_sweep_equivalent\":"<<double(burnProposals)/indices.size()
+        <<",\"measurement_stride\":"<<p.measurement_stride
+        <<",\"measurement_stride_unit\":\""<<p.run_units<<"\""
+        <<",\"measurement_stride_proposals\":"<<(p.run_units=="sweeps"?
+            static_cast<long long>(p.measurement_stride)*static_cast<long long>(indices.size()):
+            static_cast<long long>(p.measurement_stride))
+        <<",\"measurement_proposals\":"<<(attempted-burnProposals)
+        <<",\"measurement_sweep_equivalent\":"<<double(attempted-burnProposals)/indices.size()
+        <<",\"proposal_count\":"<<attempted
+        <<",\"fermion_parity_convention\":\"block_majorana_physical\""
+        <<",\"trial_internal_pfaffian_sign\":"<<trialParity.internal_pfaffian_sign
+        <<",\"trial_block_reordering_sign\":"<<trialParity.block_reordering_sign
         <<",\"stabilization_block\":"<<p.block<<",\"audit_interval\":"<<p.audit_interval
         <<",\"walker_mode\":\""<<p.walker_mode<<"\""
         <<",\"initialization_policy\":\""<<walker.initializationPolicy()<<"\""
-        <<",\"proposal_schedule\":\"forward_backward\""
+        <<",\"proposal_schedule\":\""<<(p.run_units=="sweeps"?
+            "complete_sweep_alternating":"legacy_forward_backward")<<"\""
         <<",\"minimum_overlap_rcond\":"<<d.minimum_overlap_rcond
         <<",\"green_fast_rebuild_relative_error_max\":"<<d.maximum_green_rebuild_error
         <<",\"ratio_reference_relative_error_max\":"<<d.maximum_ratio_reference_error

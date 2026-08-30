@@ -105,9 +105,7 @@ MatType hsExponent(const SpinlessTvChainUtils &config, int bondType,
 }
 
 std::pair<int, int> bondCounts(const SpinlessTvChainUtils &config) {
-    if (config.boundaryType == 0)
-        return {config.Lx / 2, (config.Lx - 1) / 2};
-    return {(config.Lx + 1) / 2, config.Lx / 2};
+    return pureProjectorCheckerboardBondCounts(config.Lx, config.boundaryType);
 }
 
 struct BuiltContour {
@@ -193,27 +191,21 @@ cVecType denseTrialVector(const GaussianTrialState &trial, const MatType &hTrial
         if (error < best) { best = error; selected = candidate; }
     }
     require(best < 1e-10, "no dense Fock vector matches trial covariance");
+    double denseParity = 0.0;
+    for (int state = 0; state < selected.size(); ++state)
+        denseParity += ((__builtin_popcount(unsigned(state)) & 1) ? -1.0 : 1.0) *
+                       std::norm(selected(state));
+    require(std::abs(std::abs(denseParity) - 1.0) < 1e-10,
+            "dense trial does not have definite Fock parity");
+    require((denseParity >= 0.0 ? 1 : -1) == trial.fermionParity(),
+            "dense-Fock trial sector disagrees with physical Majorana parity");
     return selected;
 }
 
 struct Observables { DataType spi = 0.0, sdq = 0.0, rcdw = 0.0; };
 
 DataType structureFromGreen(const MatType &green, int length, double q) {
-    DataType sum = 0.0;
-    for (int i = 0; i < length; ++i)
-        for (int j = 0; j < length; ++j) {
-            DataType correlation;
-            if (i == j) correlation = 0.25;
-            else {
-                const int ai = i, bi = length + i, aj = j, bj = length + j;
-                correlation = -0.25 *
-                    (green(ai, bi) * green(aj, bj) -
-                     green(ai, aj) * green(bi, bj) +
-                     green(ai, bj) * green(bi, aj));
-            }
-            sum += std::exp(DataType(0.0, q * (i - j))) * correlation;
-        }
-    return sum / double(length);
+    return pureProjectorStructureFactor(green, length, q);
 }
 
 Observables observablesFromGreen(const MatType &green, int length) {

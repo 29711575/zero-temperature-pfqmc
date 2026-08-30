@@ -16,7 +16,9 @@ def record(command, env=None):
 def base(exe, L, boundary, hs, seed, block, retained="off", mode="fast-strict",
          theta="0.4", burn="40", measurements="80", V="0.8", audit="0"):
     zero = boundary == "obc"
-    trial_parity = 1 if L % 4 == 2 else -1
+    internal_parity = 1 if L % 4 == 2 else -1
+    reorder_sign = -1 if (L * (L - 1) // 2) % 2 else 1
+    trial_parity = internal_parity * reorder_sign
     return [str(exe), "--L", str(L), "--V", V, "--t", "1", "--delta", "1",
             "--mu", "0", "--theta", theta, "--dt", "0.1", "--boundary", boundary,
             "--hs-scheme", hs, "--trial-t", "1", "--trial-delta", "1",
@@ -24,7 +26,8 @@ def base(exe, L, boundary, hs, seed, block, retained="off", mode="fast-strict",
             "--edge-splitting", "1e-8" if zero else "0", "--burn", burn,
             "--measurements", measurements, "--seed", str(seed),
             "--stabilization-block", str(block), "--retained", str(retained),
-            "--audit-interval", audit, "--walker-mode", mode]
+            "--audit-interval", audit, "--walker-mode", mode,
+            "--run-units", "proposals", "--measurement-stride", "1"]
 
 
 def require_complete(run, value, context):
@@ -116,7 +119,8 @@ def run_ed(exe, ed_exe, out):
         command = [str(ed_exe), "--L", str(L), "--V", "0.5", "--t", "1",
                    "--delta", "1", "--mu", "0", "--boundary", boundary,
                    "--trial-t", "1", "--trial-delta", "1", "--trial-mu", trial_mu,
-                   "--trial-parity", "1" if L % 4 == 2 else "-1",
+                   "--trial-parity", str((1 if L % 4 == 2 else -1) *
+                                           (-1 if (L * (L - 1) // 2) % 2 else 1)),
                    "--edge-splitting", split]
         run, exact = record(command); require_complete(run, exact, "ED oracle")
         for theta in (2, 4, 8, 12):

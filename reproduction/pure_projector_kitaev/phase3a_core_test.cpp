@@ -135,6 +135,14 @@ void proposalTransactionTest() {
         require(walker.configurationHash()==before,"rejected proposal mutated HS");
         require(relativeError(walker.measurementGreen().green,oldGreen)<1e-12,
                 "rejected proposal mutated Green");
+        require(walker.currentWeight().green.size()!=0,
+                "rejected proposal left currentWeight Green stale/invalid");
+    } else {
+        require(walker.currentWeight().green.size()!=0,
+                "accepted proposal left currentWeight Green stale/invalid");
+        require(relativeError(walker.currentWeight().green,
+                              result.ratio.fast_updated_green)<1e-10,
+                "accepted proposal did not synchronize currentWeight Green");
     }
     std::cout << "PASS proposal_transaction\n";
 }

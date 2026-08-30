@@ -42,6 +42,8 @@ struct PureEndpointRebuildResult {
     double overlap_rcond = 0.0;
     double solve_residual = std::numeric_limits<double>::infinity();
     double green_residual = std::numeric_limits<double>::infinity();
+    double green_skew_residual = std::numeric_limits<double>::infinity();
+    double green_diagonal_residual = std::numeric_limits<double>::infinity();
     double log_abs_weight = -std::numeric_limits<double>::infinity();
     double log_abs_scalar_prefactor = -std::numeric_limits<double>::infinity();
     DataType scalar_prefactor_phase = DataType(0.0,0.0);
@@ -178,6 +180,8 @@ inline PureEndpointRebuildResult pureProjectorEndpointRebuild(
     result.overlap_rcond=endpoint.overlap_rcond;
     result.solve_residual=endpoint.solve_residual;
     result.green_residual=endpoint.green_residual;
+    result.green_skew_residual=endpoint.green_skew_residual;
+    result.green_diagonal_residual=endpoint.green_diagonal_residual;
     if (!endpoint.ok()) {
         result.status=PureEndpointRebuildStatus::endpoint_overlap_untrusted;
         result.message=std::string("target-cut overlap failed: ")+

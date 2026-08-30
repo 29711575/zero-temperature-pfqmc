@@ -26,11 +26,6 @@ MatType kinetic(int L,int boundary,double t,double delta,double mu){auto one=[&]
 MatType denseQuadratic(const MatType&h,const std::vector<MatType>&gamma){MatType result=MatType::Zero(gamma[0].rows(),gamma[0].cols());
     for(int i=0;i<h.rows();++i)for(int j=i+1;j<h.cols();++j)result+=.5*h(i,j)*gamma[i]*gamma[j];return result;}
 
-DataType structure(const MatType&g,int L,double q){DataType sum=0;for(int i=0;i<L;++i)for(int j=0;j<L;++j){
-    DataType corr;if(i==j)corr=.25;else{int ai=i,bi=L+i,aj=j,bj=L+j;
-        corr=-.25*(g(ai,bi)*g(aj,bj)-g(ai,aj)*g(bi,bj)+g(ai,bj)*g(bi,aj));}
-    sum+=std::exp(DataType(0,q*(i-j)))*corr;}return sum/double(L);}
-
 std::map<std::string,std::string> arguments(int argc,char**argv){std::map<std::string,std::string> out;
     for(int i=1;i<argc;++i){std::string key=argv[i];if(key.rfind("--",0)!=0||i+1>=argc)
         throw std::invalid_argument("arguments must be pairs");out[key.substr(2)]=argv[++i];}return out;}
@@ -51,6 +46,8 @@ int main(int argc,char**argv){try{auto a=arguments(argc,argv);auto get=[&](const
     cVecType trialVector=ts.eigenvectors().col(0);double denseTrialParity=0;for(int state=0;state<(1<<L);++state)
         denseTrialParity+=(__builtin_popcount(unsigned(state))&1?-1:1)*std::norm(trialVector(state));
     int fockSector=denseTrialParity>=0?1:-1;
+    if(std::abs(std::abs(denseTrialParity)-1.0)>1e-10||fockSector!=policy)
+        throw std::runtime_error("dense-Fock trial parity does not match physical parity policy");
 
     MatType h=kinetic(L,boundary,t,delta,mu);MatType physical=denseQuadratic(h,gamma);
     std::vector<MatType> density(L);for(int i=0;i<L;++i)density[i]=DataType(0,-.5)*gamma[i]*gamma[L+i];
@@ -59,12 +56,20 @@ int main(int argc,char**argv){try{auto a=arguments(argc,argv);auto get=[&](const
     MatType sector(basis.size(),basis.size());for(int i=0;i<int(basis.size());++i)for(int j=0;j<int(basis.size());++j)sector(i,j)=physical(basis[i],basis[j]);
     Eigen::SelfAdjointEigenSolver<MatType> solver(sector);if(solver.info()!=Eigen::Success)throw std::runtime_error("ED eigensolver failed");
     cVecType state=cVecType::Zero(1<<L);for(int i=0;i<int(basis.size());++i)state(basis[i])=solver.eigenvectors()(i,0);
+    double denseStateParity=0;for(int fock=0;fock<(1<<L);++fock)
+        denseStateParity+=(__builtin_popcount(unsigned(fock))&1?-1:1)*std::norm(state(fock));
+    if(std::abs(std::abs(denseStateParity)-1.0)>1e-10)
+        throw std::runtime_error("ED state is not in a definite dense-Fock parity sector");
+    const int physicalParity=denseStateParity>=0?1:-1;
     MatType green=MatType::Zero(2*L,2*L);for(int i=0;i<2*L;++i)for(int j=0;j<2*L;++j)if(i!=j)
         green(i,j)=-(state.adjoint()*gamma[i]*gamma[j]*state)(0);
-    DataType spi=structure(green,L,kPi),sdq=structure(green,L,kPi-2*kPi/L);
+    DataType spi=pureProjectorStructureFactor(green,L,kPi);
+    DataType sdq=pureProjectorStructureFactor(green,L,kPi-2*kPi/L);
     std::cout<<std::setprecision(17)<<"{\"status\":\"complete\",\"L\":"<<L<<",\"V\":"<<V
         <<",\"boundary\":\""<<(boundary?"obc":"pbc")<<"\",\"trial_parity\":"<<policy
         <<",\"dense_fock_parity_sector\":"<<fockSector<<",\"energy\":"<<solver.eigenvalues()(0)
-        <<",\"fermion_parity\":"<<policy<<",\"S_pi\":"<<spi.real()<<",\"S_pi_dq\":"<<sdq.real()
-        <<",\"R_CDW\":"<<(1-sdq/spi).real()<<"}\n";return 0;
+        <<",\"fermion_parity\":"<<physicalParity
+        <<",\"fermion_parity_source\":\"dense_fock_state\""
+        <<",\"S_pi\":"<<spi.real()<<",\"S_pi_dq\":"<<sdq.real()
+        <<",\"R_CDW\":"<<(DataType(1.0)-sdq/spi).real()<<"}\n";return 0;
 }catch(const std::exception&e){std::cerr<<"pure_projector_ed: "<<e.what()<<'\n';return 1;}}

@@ -299,9 +299,15 @@ inline PureFastRatioResult pureFastLocalRatioAtCut(
                std::max(1.0,std::abs(result.ratio.real()))){
             result.status=PureFastRatioStatus::complex_ratio;return result;
         }
+        const PureProjectorGreenResult unchangedGreen=
+            pureProjectorGreenThinQr(oldRight,leftAfter);
+        if(!unchangedGreen.ok()){
+            result.status=PureFastRatioStatus::overlap_untrusted;return result;
+        }
         result.status=PureFastRatioStatus::success;
-        result.fast_updated_green=pureProjectorGreenThinQr(oldRight,leftAfter).green;
-        result.overlap_rcond=1.0;result.solve_residual=0.0;return result;
+        result.fast_updated_green=unchangedGreen.green;
+        result.overlap_rcond=unchangedGreen.overlap_rcond;
+        result.solve_residual=unchangedGreen.solve_residual;return result;
     }
     MatType u=deltaSvd.matrixU().leftCols(rank);
     MatType c=deltaSvd.singularValues().head(rank).asDiagonal()*
@@ -640,6 +646,7 @@ public:
         }
         if(!output.ratio.ok()){
             manager_->moveToCut(originalCut);
+            synchronizeCurrentGreen();
             return output;
         }
         const double probability=std::min(1.0,std::abs(output.ratio.ratio));
@@ -718,10 +725,35 @@ public:
                 (current_.z2_sign==0?z2_sign_:current_.z2_sign);
             output.z2_reference_mismatch=(expected!=z2_sign_);
         }
+        // currentWeight().green is a public diagnostic.  A low-rank accepted
+        // update changes the live cut even when the absolute-weight fields are
+        // transported incrementally, so never leave the previous Green there.
+        // If the live Green cannot be obtained, explicitly invalidate that
+        // diagnostic rather than exposing stale state.
+        synchronizeCurrentGreen();
         return output;
     }
 
 private:
+    void synchronizeCurrentGreen() {
+        if(manager_&&manager_->ok()){
+            const PureProjectorGreenResult live=manager_->green();
+            if(live.ok()){
+                current_.green=live.green;
+                current_.overlap_rank=live.overlap_rank;
+                current_.overlap_rcond=live.overlap_rcond;
+                current_.overlap_residual=live.solve_residual;
+                current_.green_residual=live.green_residual;
+                return;
+            }
+        }
+        current_.green.resize(0,0);
+        current_.overlap_rank=0;
+        current_.overlap_rcond=0.0;
+        current_.overlap_residual=std::numeric_limits<double>::infinity();
+        current_.green_residual=std::numeric_limits<double>::infinity();
+    }
+
     GaussianTrialState trial_;
     PureFastConfiguration configuration_;
     int block_size_;

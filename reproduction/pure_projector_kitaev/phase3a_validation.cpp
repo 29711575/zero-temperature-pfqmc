@@ -48,8 +48,7 @@ MatType localHsFactor(const SpinlessTvChainUtils&config,int bond,int aux,int sig
 }
 
 std::pair<int,int> bondCounts(const SpinlessTvChainUtils&c){
-    return c.boundaryType==0?std::make_pair(c.Lx/2,(c.Lx-1)/2):
-                             std::make_pair((c.Lx+1)/2,c.Lx/2);
+    return pureProjectorCheckerboardBondCounts(c.Lx,c.boundaryType);
 }
 
 PureFastConfiguration makeConfiguration(const SpinlessTvChainUtils&config,unsigned seed){
@@ -86,11 +85,8 @@ PureFastProposal flipProposal(const SpinlessTvChainUtils&model,const PureFastCon
 }
 
 struct Observables{double spi=0,sdq=0,rcdw=0;};
-DataType structure(const MatType&g,int L,double q){DataType sum=0;
-    for(int i=0;i<L;++i)for(int j=0;j<L;++j){DataType corr;
-        if(i==j)corr=.25;else{int ai=i,bi=L+i,aj=j,bj=L+j;
-            corr=-.25*(g(ai,bi)*g(aj,bj)-g(ai,aj)*g(bi,bj)+g(ai,bj)*g(bi,aj));}
-        sum+=std::exp(DataType(0,q*(i-j)))*corr;}return sum/double(L);}
+DataType structure(const MatType&g,int L,double q){
+    return pureProjectorStructureFactor(g,L,q);}
 Observables observe(const MatType&g,int L){DataType p=structure(g,L,kPi),d=structure(g,L,kPi-2*kPi/L);
     return{p.real(),d.real(),(1.0-d/p).real()};}
 

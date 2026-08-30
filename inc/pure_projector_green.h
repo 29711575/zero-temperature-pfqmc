@@ -17,7 +17,8 @@ enum class PureProjectorStatus {
     overlap_rank_deficient,
     overlap_ill_conditioned,
     solve_residual_exceeded,
-    green_residual_exceeded
+    green_residual_exceeded,
+    green_structure_exceeded
 };
 
 inline const char *pureProjectorStatusName(PureProjectorStatus status) {
@@ -30,6 +31,7 @@ inline const char *pureProjectorStatusName(PureProjectorStatus status) {
     case PureProjectorStatus::overlap_ill_conditioned: return "overlap_ill_conditioned";
     case PureProjectorStatus::solve_residual_exceeded: return "solve_residual_exceeded";
     case PureProjectorStatus::green_residual_exceeded: return "green_residual_exceeded";
+    case PureProjectorStatus::green_structure_exceeded: return "green_structure_exceeded";
     }
     return "unknown";
 }
@@ -39,6 +41,10 @@ struct PureProjectorOptions {
     double minimum_overlap_rcond = 1e-12;
     double solve_residual_tolerance = 1e-10;
     double green_residual_tolerance = 1e-10;
+    // Always compute skew/diagonal diagnostics.  Enabling this flag promotes
+    // them to an additional fail-closed gate; it is off by default so this
+    // review does not silently change the frozen Phase 3C trust policy.
+    bool fail_on_green_structure = false;
 };
 
 struct ThinQrResult {
@@ -56,6 +62,8 @@ struct PureProjectorGreenResult {
     double overlap_rcond = 0.0;
     double solve_residual = std::numeric_limits<double>::infinity();
     double green_residual = std::numeric_limits<double>::infinity();
+    double green_skew_residual = std::numeric_limits<double>::infinity();
+    double green_diagonal_residual = std::numeric_limits<double>::infinity();
     bool ok() const { return status == PureProjectorStatus::success; }
 };
 
@@ -149,6 +157,20 @@ inline PureProjectorGreenResult pureProjectorGreen(
     if (!pureProjectorMatrixFinite(result.green) ||
         result.green_residual > options.green_residual_tolerance) {
         result.status = PureProjectorStatus::green_residual_exceeded;
+        return result;
+    }
+    const double greenScale =
+        std::max(1.0, std::sqrt(double(result.green.rows())));
+    result.green_skew_residual =
+        (result.green + result.green.transpose()).norm() / greenScale;
+    result.green_diagonal_residual =
+        result.green.diagonal().norm() / greenScale;
+    if (!std::isfinite(result.green_skew_residual) ||
+        !std::isfinite(result.green_diagonal_residual) ||
+        (options.fail_on_green_structure &&
+         (result.green_skew_residual > options.green_residual_tolerance ||
+          result.green_diagonal_residual > options.green_residual_tolerance))) {
+        result.status = PureProjectorStatus::green_structure_exceeded;
         return result;
     }
     result.status = PureProjectorStatus::success;

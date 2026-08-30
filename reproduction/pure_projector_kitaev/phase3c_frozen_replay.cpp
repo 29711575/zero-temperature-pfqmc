@@ -17,9 +17,9 @@ namespace {
 struct Task {int id,L;double V;std::uint64_t seed;int parity,attempted,index;
     double uniform,ratio;std::uint64_t pre_hash;bool accepted;};
 const std::vector<Task> tasks={
-    {4,6,4.0,706041,1,110,146,0.52928038756354223,
+    {4,6,4.0,706041,-1,110,146,0.52928038756354223,
      0.707419140654256205736,7807527216050905631ULL,true},
-    {8,6,6.0,706061,1,415,553,0.56577673777691728,
+    {8,6,6.0,706061,-1,415,553,0.56577673777691728,
      0.002657388953068520511,5178673164861548103ULL,false}};
 
 MatType kineticGenerator(int L,double delta,double mu){
@@ -90,8 +90,13 @@ Replay replay(const Task&t){
                 <<result.ratio.mp_reference.message<<'\n';
             throw std::runtime_error("trajectory failed before frozen proposal");}
         if(attempted==t.attempted){
-            if(index!=t.index||pre!=t.pre_hash||std::abs(u-t.uniform)>1e-15)
+            if(index!=t.index||pre!=t.pre_hash||std::abs(u-t.uniform)>1e-15){
+                std::cerr<<"task="<<t.id<<" expected_index="<<t.index
+                    <<" actual_index="<<index<<" expected_hash="<<t.pre_hash
+                    <<" actual_hash="<<pre<<" expected_uniform="<<std::setprecision(17)
+                    <<t.uniform<<" actual_uniform="<<u<<'\n';
                 throw std::runtime_error("frozen proposal identity/hash/uniform mismatch");
+            }
             if(result.terminated||!result.ratio.ok()||!result.ratio.mp_reference.ok()){
                 std::cerr<<"task="<<t.id<<" ratio_status="<<int(result.ratio.status)
                     <<" mp_status="<<pureMpProposalStatusName(result.ratio.mp_reference.status)

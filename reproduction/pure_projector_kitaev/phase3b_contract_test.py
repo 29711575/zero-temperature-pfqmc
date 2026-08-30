@@ -28,7 +28,7 @@ def run_driver(executable, retained_path, *extra, env=None):
         str(executable), "--L", "2", "--V", "0.5", "--t", "1",
         "--delta", "0.7", "--mu", "0.3", "--theta", "0.2", "--dt", "0.1",
         "--boundary", "obc", "--hs-scheme", "hs0", "--trial-t", "1",
-        "--trial-delta", "0.7", "--trial-mu", "0.3", "--trial-parity", "1",
+        "--trial-delta", "0.7", "--trial-mu", "0.3", "--trial-parity", "-1",
         "--edge-splitting", "0", "--burn", "4", "--measurements", "8",
         "--seed", "913", "--stabilization-block", "2", "--retained", str(retained_path),
     ] + list(extra)
@@ -42,6 +42,9 @@ def source_contract():
                   "stabilization_block", "ratio_slow_reference_count", "trust_alarm_count"]:
         require(token in source, "missing production contract token: " + token)
     require("beta_trial" not in source, "pure-state driver must not expose beta_trial")
+    for token in ["run-units", "measurement-stride", "hs_variable_count",
+                  "burn_proposals", "burn_sweep_equivalent"]:
+        require(token in source, "missing sweep-semantics token: " + token)
 
 
 def runtime_contract(executable):
@@ -52,9 +55,24 @@ def runtime_contract(executable):
         record = last_json(ok.stdout)
         require(record["status"] == "complete", "normal run did not complete")
         require(record["projector_type"] == "pure_state", "wrong projector type")
+        require(record["run_units"] == "sweeps", "production default is not sweep based")
+        require(record["hs_variable_count"] == 4, "wrong HS variable count")
+        require(record["burn_proposals"] == 16, "burn did not execute complete sweeps")
+        require(record["burn_sweep_equivalent"] == 4, "wrong burn sweep equivalent")
+        require(record["measurement_stride"] == 1 and
+                record["measurement_stride_unit"] == "sweeps",
+                "wrong default measurement stride")
         data = retained.read_bytes()
         require(data.endswith(b"\n"), "retained CSV lacks final newline")
         require(len(data.splitlines()) == 9, "retained CSV row count mismatch")
+
+        legacy = run_driver(executable, "off", "--run-units", "proposals",
+                            "--measurement-stride", "1")
+        require(legacy.returncode == 0, legacy.stderr)
+        legacy_record = last_json(legacy.stdout)
+        require(legacy_record["run_units"] == "proposals", "legacy mode not explicit")
+        require(legacy_record["burn_proposals"] == 4, "legacy burn unit changed")
+        require(legacy_record["proposal_count"] == 12, "legacy proposal trajectory length changed")
 
         odd = subprocess.run([str(executable), "--L", "3", "--boundary", "pbc"],
                              text=True, capture_output=True)

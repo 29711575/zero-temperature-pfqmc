@@ -26,6 +26,7 @@ set +e
   --boundary "$boundary" --hs-scheme "$hs" --trial-t 1 --trial-delta 1 \
   --trial-mu "$trial_mu" --trial-parity "$parity" --edge-splitting "$splitting" \
   --burn 1000 --measurements 2000 --seed "$seed" --stabilization-block 8 \
+  --run-units sweeps --measurement-stride 1 \
   --retained "$result/retained.csv" --audit-interval 100 --walker-mode fast-strict \
   --source-commit "$source_commit" --executable-sha256 "$exe_sha" \
   >"$result/result.jsonl" 2>"$result/stderr.log"

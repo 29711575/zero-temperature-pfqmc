@@ -16,4 +16,5 @@ libraries=("$root/src/skewMatUtils.cpp" "$PFQMC_PFAPACK_DIR/c_interface/libcpfap
 "$CXX" "${common[@]}" "$here/phase3c_core_test.cpp" "${libraries[@]}" -o "$build_dir/phase3c_core_test"
 "$CXX" "${common[@]}" "$here/phase3c_frozen_replay.cpp" "${libraries[@]}" -o "$build_dir/phase3c_frozen_replay"
 "$CXX" "${common[@]}" "$here/phase3c_mirrored_validation.cpp" "${libraries[@]}" -o "$build_dir/phase3c_mirrored_validation"
+"$CXX" "${common[@]}" "$here/production_semantics_core_test.cpp" "${libraries[@]}" -o "$build_dir/production_semantics_core_test"
 "$CXX" "${common[@]}" "$here/phase3a_validation.cpp" "${libraries[@]}" -o "$build_dir/phase3a_validation"

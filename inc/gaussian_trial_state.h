@@ -2,6 +2,7 @@
 #define GAUSSIAN_TRIAL_STATE_H
 
 #include "kitaevChain.h"
+#include "pure_projector_observables.h"
 #include "skewMatUtils.h"
 
 #include <algorithm>
@@ -160,14 +161,13 @@ public:
     }
 
     int fermionParity(double realityTolerance = 1e-8) const {
-        MatType realSkew = DataType(0.0, -1.0) * G_T;
-        const PfaffianResult result = signOfPfafWithStatus(realSkew);
-        if (!result.ok() || std::abs(result.value.imag()) > realityTolerance ||
-            std::abs(result.value.real()) < 1.0 - realityTolerance) {
+        const PurePhysicalParityResult result =
+            pureProjectorPhysicalParity(G_T, realityTolerance);
+        if (!result.ok()) {
             throw GaussianTrialStateError(GaussianTrialStateStatus::parity_failure,
-                                          "pure-state parity Pfaffian is untrusted");
+                "pure-state physical parity Pfaffian is untrusted");
         }
-        return result.value.real() >= 0.0 ? 1 : -1;
+        return result.physical_parity;
     }
 
 private:

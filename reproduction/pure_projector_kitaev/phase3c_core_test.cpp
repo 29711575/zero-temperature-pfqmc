@@ -65,7 +65,7 @@ void mirroredTheoremInitializer() {
     const GaussianTrialState trial = GaussianTrialState::fromPhi(canonicalPhi(3));
     PureFastConfiguration ket;
     for (int i=0;i<5;++i) {
-        ket.slices.emplace_back(rotation(6,i%4,(i+2)%6,0.03*(i+1)),
+        ket.slices.emplace_back(rotation(6,i%6,(i+2)%6,0.03*(i+1)),
                                 DataType(1.0,0.0),"f"+std::to_string(i));
         ket.hs_fields.push_back(i%2?1:-1);
         ket.locations.push_back({PureBranch::Ket,i/2,i,i%2,i});
@@ -79,7 +79,9 @@ void mirroredTheoremInitializer() {
     const int cut=int(ket.slices.size());
     PureEndpointRebuildResult endpoint=pureProjectorEndpointRebuild(
         trial,mirrored.configuration.slices,cut,2,PureProjectorOptions());
-    require(endpoint.ok(), "mirrored center endpoint rebuild failed");
+    require(endpoint.ok(), std::string("mirrored center endpoint rebuild failed: ")+
+        endpoint.message+" skew="+std::to_string(endpoint.green_skew_residual)+
+        " diagonal="+std::to_string(endpoint.green_diagonal_residual));
     require(endpoint.overlap_rcond>1.0-1e-12,
             "mirrored center overlap is not unit conditioned");
     require(endpoint.green_residual<1e-12,"mirrored center Green residual is too large");
