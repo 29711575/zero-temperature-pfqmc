@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#PBS -N pure_semantics
+#PBS -l select=1:ncpus=4:mem=8gb
+#PBS -l walltime=06:00:00
+#PBS -j oe
+
+set -euo pipefail
+export LC_ALL=C LANG=C OMP_NUM_THREADS=4 MKL_NUM_THREADS=1
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null 2>&1
+
+work=/home/sunxr/pure-projector-production-semantics-review
+root="$work/reproduction/pure_projector_kitaev/production_semantics_hpc_results"
+result="$root/${PBS_JOBID:?missing PBS_JOBID}"
+if test -e "$result"; then
+  echo "refusing to overwrite result directory: $result" >&2
+  exit 70
+fi
+mkdir -p "$result"
+cd "$work"
+
+exe=reproduction/pure_projector_kitaev/build_semantics_hpc/phase2_validation
+source_commit=$(git rev-parse HEAD)
+exe_sha=$(sha256sum "$exe" | awk '{print $1}')
+set +e
+"$exe" "$result" "$source_commit" "$exe_sha" \
+  >"$result/result.jsonl" 2>"$result/stderr.log"
+code=$?
+set -e
+printf '%s\n' "$code" >"$result/exit_code.txt"
+exit "$code"
