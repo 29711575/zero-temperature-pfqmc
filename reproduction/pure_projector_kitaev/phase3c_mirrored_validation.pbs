@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#PBS -N pure_p3c_init
+#PBS -J 0-3
+#PBS -l select=1:ncpus=1:mem=16gb
+#PBS -l walltime=04:00:00
+#PBS -j oe
+
+set -euo pipefail
+export LC_ALL=C LANG=C OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null 2>&1
+work=/home/sunxr/pure-state-projector-phase3c-trust-init
+result_root="$work/reproduction/pure_projector_kitaev/phase3c_validation_results"
+tasks=(16 17 20 21)
+index=${PBS_ARRAY_INDEX:?missing PBS_ARRAY_INDEX}
+task=${tasks[$index]}
+mkdir -p "$result_root"
+cd "$work"
+build_phase3c/phase3c_mirrored_validation "$task" \
+  "$result_root/mirrored_task_${task}.csv" \
+  >"$result_root/mirrored_task_${task}.stdout" \
+  2>"$result_root/mirrored_task_${task}.stderr"

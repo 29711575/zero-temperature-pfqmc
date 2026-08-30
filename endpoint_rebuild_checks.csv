@@ -1,0 +1,6 @@
+case,cut,endpoint_status,sequential_prefix_status,overlap_rcond,solve_residual,green_residual,prefix_failure_ignored,status
+repaired_prefix,2,success,zero_weight,0.99999999999999989,0,2.2204460492503131e-16,1,PASS
+mirrored_task16,center,success,not_called,0.99999999999999833,1.1118181626534397e-15,3.1613726513817714e-15,1,PASS
+mirrored_task17,center,success,not_called,0.999999999999998,1.0547568939551036e-15,2.9951614312058899e-15,1,PASS
+mirrored_task20,center,success,not_called,0.99999999999999822,1.105585697663583e-15,3.1461758973151038e-15,1,PASS
+mirrored_task21,center,success,not_called,0.99999999999999767,1.0717568985429339e-15,3.0242136915256759e-15,1,PASS

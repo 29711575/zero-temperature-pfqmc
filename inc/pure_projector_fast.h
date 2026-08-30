@@ -1,6 +1,8 @@
 #ifndef PURE_PROJECTOR_FAST_H
 #define PURE_PROJECTOR_FAST_H
 
+#include "pure_projector_endpoint.h"
+#include "pure_projector_mp.h"
 #include "pure_projector_stack.h"
 
 #include <chrono>
@@ -15,6 +17,7 @@
 
 enum class PureBranch { Ket, Bra };
 enum class PureFastRunMode { AuditLockstep, FastStrict };
+enum class PureFastInitializationPolicy { SequentialAudit, MirroredTheoremZ2Plus };
 enum class PureFastRatioStatus {
     success,
     invalid_proposal,
@@ -41,6 +44,74 @@ struct PureFastConfiguration {
     std::vector<int> hs_fields;
     std::vector<PureSliceLocation> locations;
 };
+
+enum class PureMirroredInitializationStatus {
+    success,
+    invalid_ket_protocol,
+    nonfinite_scalar_prefactor,
+    nonpositive_scalar_prefactor
+};
+
+struct PureMirroredInitializationResult {
+    PureMirroredInitializationStatus status =
+        PureMirroredInitializationStatus::invalid_ket_protocol;
+    PureFastConfiguration configuration;
+    DataType total_scalar_prefactor = DataType(0.0,0.0);
+    int initial_z2_sign = 0;
+    std::string initialization_policy;
+    std::string message;
+    bool ok() const { return status == PureMirroredInitializationStatus::success; }
+};
+
+// The input is the canonical ket protocol/action order.  Appending the
+// adjoints in strict reverse order reuses the same noncommuting factor-order
+// convention as PureStaticProjectorContour and gives U_bra=U_ket^dagger.
+inline PureMirroredInitializationResult pureProjectorMirroredConfiguration(
+    const PureFastConfiguration &ketProtocol,double realityTolerance) {
+    PureMirroredInitializationResult result;
+    if (ketProtocol.slices.empty() ||
+        ketProtocol.slices.size()!=ketProtocol.hs_fields.size() ||
+        ketProtocol.slices.size()!=ketProtocol.locations.size()) {
+        result.message="invalid ket protocol";
+        return result;
+    }
+    result.configuration=ketProtocol;
+    for (int index=int(ketProtocol.slices.size())-1;index>=0;--index) {
+        const PureProjectorSlice &source=ketProtocol.slices[index];
+        if (!pureProjectorMatrixFinite(source.matrix) ||
+            !std::isfinite(source.eta.real()) || !std::isfinite(source.eta.imag())) {
+            result.status=PureMirroredInitializationStatus::nonfinite_scalar_prefactor;
+            result.message="nonfinite mirrored ket factor or scalar";
+            return result;
+        }
+        PureProjectorSlice mirrored(source.matrix.adjoint().eval(),
+            std::conj(source.eta),"mirrored_adjoint:"+source.label);
+        PureSliceLocation location=ketProtocol.locations[index];
+        location.branch=PureBranch::Bra;
+        result.configuration.slices.push_back(std::move(mirrored));
+        result.configuration.hs_fields.push_back(ketProtocol.hs_fields[index]);
+        result.configuration.locations.push_back(location);
+    }
+    DataType scalar(1.0,0.0);
+    for (const auto &slice:result.configuration.slices) scalar*=slice.eta;
+    result.total_scalar_prefactor=scalar;
+    if (!std::isfinite(scalar.real()) || !std::isfinite(scalar.imag())) {
+        result.status=PureMirroredInitializationStatus::nonfinite_scalar_prefactor;
+        result.message="mirrored total scalar prefactor is nonfinite";
+        return result;
+    }
+    if (!(scalar.real()>0.0) ||
+        std::abs(scalar.imag())>realityTolerance*std::max(1.0,std::abs(scalar.real()))) {
+        result.status=PureMirroredInitializationStatus::nonpositive_scalar_prefactor;
+        result.message="mirrored total scalar prefactor is not positive real";
+        return result;
+    }
+    result.status=PureMirroredInitializationStatus::success;
+    result.initial_z2_sign=1;
+    result.initialization_policy="mirrored_theorem_z2_plus";
+    result.message="U_bra=U_ket^dagger and positive scalar prefactor imply W=||U_ket Psi_T||^2>0";
+    return result;
+}
 
 struct PureFastProposal {
     int index = -1;
@@ -74,6 +145,7 @@ struct PureFastRatioResult {
     double relative_reference_error = std::numeric_limits<double>::infinity();
     double green_reference_error = std::numeric_limits<double>::infinity();
     MatType fast_updated_green;
+    PureMpProposalResult mp_reference;
     bool trust_alarm = false;
     bool used_reference = false;
     bool ok() const { return status == PureFastRatioStatus::success; }
@@ -100,6 +172,7 @@ struct PureFastOptions {
     double decision_margin_tolerance = 1e-12;
     double green_update_tolerance = 1e-8;
     std::uint64_t read_only_audit_interval = 0;
+    bool mp_same_proposal_fallback = true;
 };
 
 struct PureFastDiagnostics {
@@ -108,9 +181,16 @@ struct PureFastDiagnostics {
     std::uint64_t ratio_slow_reference_count = 0;
     std::uint64_t trust_alarm_count = 0;
     std::uint64_t slow_reference_failure_count = 0;
+    std::uint64_t mp_fallback_count = 0;
+    std::uint64_t mp_fallback_failure_count = 0;
+    std::uint64_t mp_green_double_recovery_count = 0;
+    std::uint64_t read_only_endpoint_audit_failure_count = 0;
     double minimum_overlap_rcond = 1.0;
     double maximum_green_rebuild_error = 0.0;
     double maximum_ratio_reference_error = 0.0;
+    double maximum_endpoint_rebuild_green_residual = 0.0;
+    double total_fast_seconds = 0.0;
+    double total_reference_seconds = 0.0;
     int first_failure_proposal = -1;
 };
 
@@ -322,17 +402,56 @@ public:
     PureProjectorFastWalker(const GaussianTrialState &trial,
                             PureFastConfiguration configuration,int blockSize,
                             PureFastRunMode mode,
-                            PureFastOptions options=PureFastOptions())
+                            PureFastOptions options=PureFastOptions(),
+                            PureFastInitializationPolicy initializationPolicy=
+                                PureFastInitializationPolicy::SequentialAudit)
         : trial_(trial),configuration_(std::move(configuration)),block_size_(blockSize),
-          mode_(mode),options_(options) {
+          mode_(mode),options_(options),initialization_policy_(initializationPolicy) {
         if(configuration_.slices.size()!=configuration_.hs_fields.size()||
            configuration_.slices.size()!=configuration_.locations.size())
             throw std::invalid_argument("fast walker configuration size mismatch");
-        current_=pureProjectorStableReferenceWeight(trial_,configuration_.slices,options_);
-        if(!current_.ok())throw std::runtime_error("fast walker initial weight failed");
-        z2_sign_=current_.z2_sign==0?1:current_.z2_sign;
+        if(initialization_policy_==PureFastInitializationPolicy::MirroredTheoremZ2Plus){
+            DataType scalar(1.0,0.0);for(const auto&s:configuration_.slices)scalar*=s.eta;
+            if(!std::isfinite(scalar.real())||!std::isfinite(scalar.imag())||
+               !(scalar.real()>0.0)||std::abs(scalar.imag())>options_.reality_tolerance*
+                    std::max(1.0,std::abs(scalar.real())))
+                throw std::runtime_error("mirrored initializer scalar-prefactor theorem failed");
+            const int center=int(configuration_.slices.size()/2);
+            PureProjectorOptions endpointOptions;
+            endpointOptions.rank_tolerance=options_.rank_tolerance;
+            endpointOptions.minimum_overlap_rcond=options_.minimum_overlap_rcond;
+            endpointOptions.solve_residual_tolerance=options_.residual_tolerance;
+            endpointOptions.green_residual_tolerance=options_.green_update_tolerance;
+            const PureEndpointRebuildResult endpoint=pureProjectorEndpointRebuild(
+                trial_,configuration_.slices,center,block_size_,endpointOptions);
+            if(!endpoint.ok())throw std::runtime_error(
+                std::string("mirrored endpoint initializer failed: ")+endpoint.message);
+            current_.status=PureProjectorWeightStatus::success;
+            current_.log_abs_weight=endpoint.log_abs_weight;
+            current_.complex_phase=DataType(1.0,0.0);
+            current_.z2_sign=1;current_.green=endpoint.green;
+            current_.overlap_rank=endpoint.overlap_rank;
+            current_.overlap_rcond=endpoint.overlap_rcond;
+            current_.overlap_residual=endpoint.solve_residual;
+            current_.green_residual=endpoint.green_residual;
+            diagnostics_.maximum_endpoint_rebuild_green_residual=endpoint.green_residual;
+            current_.weight=current_.log_abs_weight<700.0?
+                DataType(std::exp(current_.log_abs_weight),0.0):DataType(1.0,0.0);
+            z2_sign_=1;
+        }else{
+            current_=pureProjectorStableReferenceWeight(trial_,configuration_.slices,options_);
+            if(!current_.ok())throw std::runtime_error("fast walker initial weight failed");
+            z2_sign_=current_.z2_sign==0?1:current_.z2_sign;
+        }
+        stack_options_.rank_tolerance=options_.rank_tolerance;
+        stack_options_.minimum_overlap_rcond=options_.minimum_overlap_rcond;
+        stack_options_.solve_residual_tolerance=options_.residual_tolerance;
+        stack_options_.green_residual_tolerance=options_.green_update_tolerance;
+        const int initialCut=initialization_policy_==
+            PureFastInitializationPolicy::MirroredTheoremZ2Plus?
+            int(configuration_.slices.size()/2):0;
         manager_.reset(new PureProjectorStackManager(
-            trial_,configuration_.slices,block_size_));
+            trial_,configuration_.slices,block_size_,stack_options_,initialCut));
         if(!manager_->ok())throw std::runtime_error("fast walker initial stack failed");
     }
 
@@ -342,12 +461,16 @@ public:
         // live sweep cut, otherwise the next local proposal would require a
         // long inverse propagation and accumulate avoidable round-off.
         PureProjectorStackManager measurement(
-            trial_,configuration_.slices,block_size_);
-        if(!measurement.rebuildToCut(int(configuration_.slices.size()/2)))
+            trial_,configuration_.slices,block_size_,stack_options_,
+            int(configuration_.slices.size()/2));
+        if(!measurement.ok())
             return PureProjectorGreenResult();
         return measurement.green();
     }
     int z2Sign() const {return z2_sign_;}
+    std::string initializationPolicy() const {return
+        initialization_policy_==PureFastInitializationPolicy::MirroredTheoremZ2Plus?
+        "mirrored_theorem_z2_plus":"sequential_audit";}
     const PureFastConfiguration &configuration() const{return configuration_;}
     const PureProjectorWeightResult &currentWeight() const{return current_;}
     const PureFastDiagnostics &diagnostics() const{return diagnostics_;}
@@ -382,6 +505,7 @@ public:
         }
         output.fast_seconds=std::chrono::duration<double>(
             std::chrono::steady_clock::now()-fastStart).count();
+        diagnostics_.total_fast_seconds+=output.fast_seconds;
         output.snapshot.fast_ratio=output.ratio.ratio;
         if(std::isfinite(output.ratio.overlap_rcond)&&output.ratio.overlap_rcond>0)
             diagnostics_.minimum_overlap_rcond=std::min(
@@ -402,55 +526,116 @@ public:
         bool referenceControlsDecision=mode_==PureFastRunMode::AuditLockstep||
             output.ratio.trust_alarm;
         PureProjectorWeightResult candidateWeight;
-        if(needReference){
+        bool mpControlsDecision=false;
+        const bool endpointObserverOnly=periodicAudit&&
+            mode_==PureFastRunMode::FastStrict&&!output.ratio.trust_alarm;
+        if(endpointObserverOnly){
+            ++diagnostics_.ratio_slow_reference_count;output.ratio.used_reference=true;
+            PureEndpointRebuildResult oldEndpoint=pureProjectorEndpointRebuild(
+                trial_,configuration_.slices,int(configuration_.slices.size()/2),
+                block_size_,stack_options_);
+            PureEndpointRebuildResult newEndpoint=pureProjectorEndpointRebuild(
+                trial_,candidate.slices,int(candidate.slices.size()/2),
+                block_size_,stack_options_);
+            if(oldEndpoint.ok()&&newEndpoint.ok()&&output.ratio.ok()){
+                output.ratio.slow_ratio=std::exp(
+                    newEndpoint.log_abs_weight-oldEndpoint.log_abs_weight)*
+                    pureProjectorUnitPhase(output.ratio.ratio);
+                output.ratio.relative_reference_error=
+                    std::abs(output.ratio.ratio-output.ratio.slow_ratio)/
+                    std::max(options_.zero_tolerance,std::abs(output.ratio.slow_ratio));
+                diagnostics_.maximum_ratio_reference_error=std::max(
+                    diagnostics_.maximum_ratio_reference_error,
+                    output.ratio.relative_reference_error);
+            }else ++diagnostics_.read_only_endpoint_audit_failure_count;
+        }
+        if(needReference&&!endpointObserverOnly){
             ++diagnostics_.ratio_slow_reference_count;
+            output.ratio.used_reference=true;
             const auto slowStart=std::chrono::steady_clock::now();
-            candidateWeight=pureProjectorStableReferenceWeight(trial_,candidate.slices,options_);
+            if(output.ratio.trust_alarm&&
+               options_.weight_mode==PureProjectorWeightMode::RealZ2){
+                if(!options_.mp_same_proposal_fallback){
+                    output.ratio.status=PureFastRatioStatus::reference_failure;
+                    ++diagnostics_.mp_fallback_failure_count;
+                    if(diagnostics_.first_failure_proposal<0)
+                        diagnostics_.first_failure_proposal=int(proposalNumber);
+                    terminated_=true;output.terminated=true;return output;
+                }
+                ++diagnostics_.mp_fallback_count;
+                PureMpProposalOptions mpOptions;
+                mpOptions.minimum_endpoint_rcond=options_.minimum_overlap_rcond;
+                mpOptions.residual_tolerance=options_.residual_tolerance;
+                mpOptions.reality_tolerance=options_.reality_tolerance;
+                mpOptions.zero_tolerance=options_.zero_tolerance;
+                output.ratio.mp_reference=pureProjectorMpSameProposal(
+                    trial_,configuration_.slices,proposal.index,
+                    proposal.new_factor,proposal.new_eta,mpOptions);
+                if(!output.ratio.mp_reference.ok()||
+                   !std::isfinite(output.ratio.mp_reference.ratio.real())||
+                   !std::isfinite(output.ratio.mp_reference.ratio.imag())){
+                    output.ratio.status=PureFastRatioStatus::reference_failure;
+                    ++diagnostics_.mp_fallback_failure_count;
+                    if(diagnostics_.first_failure_proposal<0)
+                        diagnostics_.first_failure_proposal=int(proposalNumber);
+                    terminated_=true;output.terminated=true;return output;
+                }
+                output.ratio.slow_ratio=output.ratio.mp_reference.ratio;
+                output.ratio.ratio=output.ratio.slow_ratio;
+                output.ratio.status=PureFastRatioStatus::success;
+                output.reference_accepted=proposal.uniform<
+                    std::min(1.0,std::abs(output.ratio.slow_ratio));
+                mpControlsDecision=true;
+            }else{
+                candidateWeight=pureProjectorStableReferenceWeight(
+                    trial_,candidate.slices,options_);
+            }
             output.slow_seconds=std::chrono::duration<double>(
                 std::chrono::steady_clock::now()-slowStart).count();
-            output.ratio.used_reference=true;
-            if(!candidateWeight.ok()||!std::isfinite(current_.log_abs_weight)||
-               std::abs(current_.complex_phase)<=options_.zero_tolerance){
+            diagnostics_.total_reference_seconds+=output.slow_seconds;
+            if(!mpControlsDecision&&(!candidateWeight.ok()||!std::isfinite(current_.log_abs_weight)||
+               std::abs(current_.complex_phase)<=options_.zero_tolerance)){
                 output.ratio.status=PureFastRatioStatus::reference_failure;
                 ++diagnostics_.slow_reference_failure_count;
                 if(diagnostics_.first_failure_proposal<0)
                     diagnostics_.first_failure_proposal=int(proposalNumber);
-                terminated_=true;output.terminated=true;return output;
-            }
-            output.ratio.slow_ratio=std::exp(candidateWeight.log_abs_weight-current_.log_abs_weight)*
-                candidateWeight.complex_phase/current_.complex_phase;
-            if(output.ratio.ok())output.ratio.relative_reference_error=
-                std::abs(output.ratio.ratio-output.ratio.slow_ratio)/
-                std::max(1e-14,std::abs(output.ratio.slow_ratio));
-            if(std::isfinite(output.ratio.relative_reference_error))
-                diagnostics_.maximum_ratio_reference_error=std::max(
-                    diagnostics_.maximum_ratio_reference_error,
-                    output.ratio.relative_reference_error);
-            const double slowProbability=std::min(1.0,std::abs(output.ratio.slow_ratio));
-            output.reference_accepted=proposal.uniform<slowProbability;
-            if(output.ratio.fast_updated_green.size()!=0){
-                PureProjectorStackManager candidateStack(
-                    trial_,candidate.slices,block_size_);
-                if(candidateStack.rebuildToCut(proposal.index+1)){
-                    const PureProjectorGreenResult referenceGreen=candidateStack.green();
-                    if(referenceGreen.ok())output.ratio.green_reference_error=
-                        (output.ratio.fast_updated_green-referenceGreen.green).norm()/
-                        std::max(1.0,referenceGreen.green.norm());
+                terminated_=true;output.terminated=true;return output;}
+            if(!mpControlsDecision){
+                output.ratio.slow_ratio=std::exp(candidateWeight.log_abs_weight-current_.log_abs_weight)*
+                    candidateWeight.complex_phase/current_.complex_phase;
+                if(output.ratio.ok())output.ratio.relative_reference_error=
+                    std::abs(output.ratio.ratio-output.ratio.slow_ratio)/
+                    std::max(1e-14,std::abs(output.ratio.slow_ratio));
+                if(std::isfinite(output.ratio.relative_reference_error))
+                    diagnostics_.maximum_ratio_reference_error=std::max(
+                        diagnostics_.maximum_ratio_reference_error,
+                        output.ratio.relative_reference_error);
+                const double slowProbability=std::min(1.0,std::abs(output.ratio.slow_ratio));
+                output.reference_accepted=proposal.uniform<slowProbability;
+                if(output.ratio.fast_updated_green.size()!=0){
+                    PureProjectorStackManager candidateStack(
+                        trial_,candidate.slices,block_size_,stack_options_,proposal.index+1);
+                    if(candidateStack.ok()){
+                        const PureProjectorGreenResult referenceGreen=candidateStack.green();
+                        if(referenceGreen.ok())output.ratio.green_reference_error=
+                            (output.ratio.fast_updated_green-referenceGreen.green).norm()/
+                            std::max(1.0,referenceGreen.green.norm());
+                    }
                 }
-            }
-            if(std::isfinite(output.ratio.green_reference_error))
-                diagnostics_.maximum_green_rebuild_error=std::max(
-                    diagnostics_.maximum_green_rebuild_error,
-                    output.ratio.green_reference_error);
-            if(std::isfinite(output.ratio.green_reference_error)&&
-               output.ratio.green_reference_error>options_.green_update_tolerance&&
-               !output.ratio.trust_alarm){
-                output.ratio.trust_alarm=true;++diagnostics_.trust_alarm_count;
-                referenceControlsDecision=true;
-            }
-            if(output.ratio.trust_alarm){
-                output.ratio.ratio=output.ratio.slow_ratio;
-                output.ratio.status=PureFastRatioStatus::success;
+                if(std::isfinite(output.ratio.green_reference_error))
+                    diagnostics_.maximum_green_rebuild_error=std::max(
+                        diagnostics_.maximum_green_rebuild_error,
+                        output.ratio.green_reference_error);
+                if(std::isfinite(output.ratio.green_reference_error)&&
+                   output.ratio.green_reference_error>options_.green_update_tolerance&&
+                   !output.ratio.trust_alarm){
+                    output.ratio.trust_alarm=true;++diagnostics_.trust_alarm_count;
+                    referenceControlsDecision=true;
+                }
+                if(output.ratio.trust_alarm){
+                    output.ratio.ratio=output.ratio.slow_ratio;
+                    output.ratio.status=PureFastRatioStatus::success;
+                }
             }
         }
         if(!output.ratio.ok()){
@@ -466,26 +651,66 @@ public:
         if(output.accepted){
             const int ratioSign=output.ratio.ratio.real()>=0?1:-1;
             if(options_.weight_mode==PureProjectorWeightMode::RealZ2)z2_sign_*=ratioSign;
-            PureProjectorSlice replacement=candidate.slices[proposal.index];
-            if(!manager_->acceptFactorAtCut(proposal.index,replacement,rightBeforeForUpdate)){
-                terminated_=true;output.terminated=true;return output;
-            }
+            if(!mpControlsDecision){PureProjectorSlice replacement=candidate.slices[proposal.index];
+                if(!manager_->acceptFactorAtCut(proposal.index,replacement,rightBeforeForUpdate)){
+                    terminated_=true;output.terminated=true;return output;}}
             configuration_=std::move(candidate);
-            if(referenceControlsDecision)current_=candidateWeight;
+            if(referenceControlsDecision&&!mpControlsDecision)current_=candidateWeight;
             else{
                 current_.log_abs_weight+=std::log(std::abs(output.ratio.ratio));
                 current_.complex_phase*=pureProjectorUnitPhase(output.ratio.ratio);
                 current_.weight=std::exp(current_.log_abs_weight)*current_.complex_phase;
                 current_.z2_sign=z2_sign_;
             }
-            if(++accepted_since_rebuild_>=std::uint64_t(std::max(1,block_size_))){
+            if(!mpControlsDecision&&++accepted_since_rebuild_>=std::uint64_t(std::max(1,block_size_))){
                 if(!manager_->rebuildCurrent()){
                     terminated_=true;output.terminated=true;return output;
                 }
                 accepted_since_rebuild_=0;++diagnostics_.rebuild_count;
             }
-        }else if(!manager_->moveToCut(originalCut)){
+        }else if(!mpControlsDecision&&!manager_->moveToCut(originalCut)){
             terminated_=true;output.terminated=true;
+        }
+        if(mpControlsDecision){
+            manager_.reset(new PureProjectorStackManager(
+                trial_,configuration_.slices,block_size_,stack_options_,originalCut));
+            if(!manager_->ok()){
+                const MatType &mpGreen=output.accepted?
+                    output.ratio.mp_reference.trusted_post_green:
+                    output.ratio.mp_reference.trusted_pre_green;
+                const double residual=mpGreen.size()? (mpGreen*mpGreen-
+                    MatType::Identity(mpGreen.rows(),mpGreen.cols())).norm()/
+                    std::max(1.0,mpGreen.norm()):std::numeric_limits<double>::infinity();
+                if(!pureProjectorMatrixFinite(mpGreen)||!std::isfinite(residual)||
+                   residual>options_.green_update_tolerance){
+                    output.ratio.status=PureFastRatioStatus::reference_failure;
+                    ++diagnostics_.mp_fallback_failure_count;
+                    terminated_=true;output.terminated=true;return output;
+                }
+                // Re-anchor the same accepted/rejected configuration at the
+                // theorem-backed center cut.  This discards only the
+                // untrusted live-cut gauge; it does not change HS, Z2, log
+                // weight, or RNG.
+                const int center=int(configuration_.slices.size()/2);
+                manager_.reset(new PureProjectorStackManager(
+                    trial_,configuration_.slices,block_size_,stack_options_,center));
+                if(!manager_->ok()){
+                    output.ratio.status=PureFastRatioStatus::reference_failure;
+                    ++diagnostics_.mp_fallback_failure_count;
+                    terminated_=true;output.terminated=true;return output;
+                }
+                ++diagnostics_.mp_green_double_recovery_count;
+            }
+            const PureProjectorGreenResult restored=manager_->green();
+            if(!restored.ok()){
+                output.ratio.status=PureFastRatioStatus::reference_failure;
+                ++diagnostics_.mp_fallback_failure_count;
+                terminated_=true;output.terminated=true;return output;
+            }
+            diagnostics_.maximum_endpoint_rebuild_green_residual=std::max(
+                diagnostics_.maximum_endpoint_rebuild_green_residual,
+                restored.green_residual);
+            ++diagnostics_.rebuild_count;accepted_since_rebuild_=0;
         }
         if(needReference&&candidateWeight.ok()){
             const int expected=output.accepted?
@@ -507,6 +732,9 @@ private:
     int z2_sign_=1;
     bool terminated_=false;
     PureFastDiagnostics diagnostics_;
+    PureProjectorOptions stack_options_;
+    PureFastInitializationPolicy initialization_policy_=
+        PureFastInitializationPolicy::SequentialAudit;
     std::uint64_t accepted_since_rebuild_=0;
 };
 

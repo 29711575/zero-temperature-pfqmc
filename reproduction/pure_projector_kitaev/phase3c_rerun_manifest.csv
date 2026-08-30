@@ -1,0 +1,11 @@
+run,original_task,L,V,boundary,hs,seed,trial_mu,edge_splitting,trial_parity,role,initialization_policy
+0,4,6,4,pbc,hs0,706041,0.3,0,1,original_failure,mirrored-theorem
+1,8,6,6,pbc,hs0,706061,0.3,0,1,original_failure,mirrored-theorem
+2,16,12,4,pbc,hs0,712041,0.3,0,-1,original_failure,mirrored-theorem
+3,17,12,4,pbc,hs0,712042,0.3,0,-1,original_failure,mirrored-theorem
+4,20,12,6,pbc,hs0,712061,0.3,0,-1,original_failure,mirrored-theorem
+5,21,12,6,pbc,hs0,712062,0.3,0,-1,original_failure,mirrored-theorem
+6,0,6,2,pbc,hs0,706021,0.3,0,1,clean_pbc_control,sequential-audit
+7,1,6,2,pbc,hs0,706022,0.3,0,1,clean_pbc_control,sequential-audit
+8,2,6,2,obc,hs1,706021,0,1e-8,1,obc_hs1_control,mirrored-theorem
+9,3,6,2,obc,hs1,706022,0,1e-8,1,obc_hs1_control,mirrored-theorem

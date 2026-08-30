@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <cstdlib>
@@ -29,7 +30,7 @@ struct Parameters {
     double trial_t=1,trial_delta=0,trial_mu=0,edge_splitting=0;
     std::uint64_t seed=0,audit_interval=0;
     std::string retained="off",source_commit="unknown",executable_sha256="unknown";
-    std::string walker_mode="fast-strict";
+    std::string walker_mode="fast-strict",initialization_policy="mirrored-theorem";
 };
 
 std::string jsonEscape(const std::string&s){std::ostringstream o;for(unsigned char c:s){
@@ -58,11 +59,16 @@ Parameters parse(int argc,char**argv){
     p.block=std::stoi(get("stabilization-block"));p.retained=get("retained");
     if(values.count("audit-interval"))p.audit_interval=std::stoull(values["audit-interval"]);
     if(values.count("walker-mode"))p.walker_mode=values["walker-mode"];
+    if(values.count("initialization-policy"))
+        p.initialization_policy=values["initialization-policy"];
     if(values.count("source-commit"))p.source_commit=values["source-commit"];
     if(values.count("executable-sha256"))p.executable_sha256=values["executable-sha256"];
     if(p.L<2||p.boundary<0||p.hs<0||p.dt<=0||p.theta<0||p.V<0||p.burn<0||
        p.measurements<=0||p.block<=0||(p.trial_parity!=1&&p.trial_parity!=-1)||
-       (p.walker_mode!="fast-strict"&&p.walker_mode!="audit-lockstep"))
+       (p.walker_mode!="fast-strict"&&p.walker_mode!="audit-lockstep")||
+       (p.initialization_policy!="mirrored-theorem"&&
+        p.initialization_policy!="sequential-audit")||
+       (p.initialization_policy=="sequential-audit"&&p.L>6))
         throw std::invalid_argument("invalid production parameter");
     double slices=p.theta/p.dt;if(std::abs(slices-std::round(slices))>1e-10*std::max(1.0,slices))
         throw std::invalid_argument("theta/dt must be integral");
@@ -103,8 +109,30 @@ GaussianTrialState makeTrial(const Parameters&p){
     return trial;
 }
 
-PureFastConfiguration makeContour(const Parameters&p,const SpinlessTvChainUtils&model,
-                                  std::mt19937_64&rng){
+PureMirroredInitializationResult makeMirroredContour(
+    const Parameters&p,const SpinlessTvChainUtils&model,std::mt19937_64&rng){
+    MatType kinetic=kineticGenerator(p.L,p.boundary,p.t,p.delta,p.mu);
+    MatType half=exponential(kinetic,-.5*p.dt);auto counts=bondCounts(model);
+    int timeSlices=int(std::llround(p.theta/p.dt));std::uniform_int_distribution<int>bit(0,1);
+    auto ketBranch=[&](){PureFastConfiguration out;int ordinal=0;
+        auto push=[&](const MatType&m,int field,int slice,int bond,int aux,const std::string&label){
+            out.slices.emplace_back(m,1.0,label);out.hs_fields.push_back(field);
+            out.locations.push_back({PureBranch::Ket,slice,ordinal++,bond,aux});};
+        for(int slice=0;slice<timeSlices;++slice){push(half,0,slice,-1,-1,"K/2");
+            for(int layer=0;layer<2;++layer)for(int aux=0;aux<(layer?counts.second:counts.first);++aux){
+                int sigma=bit(rng)?1:-1;push(localHsFactor(model,layer,aux,sigma),sigma,slice,layer,aux,
+                    std::string("V")+std::to_string(layer)+":"+std::to_string(aux));}
+            push(half,0,slice,-1,-1,"K/2");}return out;};
+    // This is the sole production construction path.  The shared helper
+    // appends the strict adjoint/reverse protocol already used by the Phase 2
+    // noncommuting-order tests; no second independent bra RNG stream exists.
+    return pureProjectorMirroredConfiguration(ketBranch(),1e-12);
+}
+
+// Retained only for small-system trajectory audits against Phase 3B.  It is
+// never selected by the production default and is forbidden for L>6.
+PureFastConfiguration makeSequentialAuditContour(
+    const Parameters&p,const SpinlessTvChainUtils&model,std::mt19937_64&rng){
     MatType kinetic=kineticGenerator(p.L,p.boundary,p.t,p.delta,p.mu);
     MatType half=exponential(kinetic,-.5*p.dt);auto counts=bondCounts(model);
     int timeSlices=int(std::llround(p.theta/p.dt));std::uniform_int_distribution<int>bit(0,1);
@@ -118,8 +146,6 @@ PureFastConfiguration makeContour(const Parameters&p,const SpinlessTvChainUtils&
                     std::string("V")+std::to_string(layer)+":"+std::to_string(aux));}
             push(half,0,slice,-1,-1,"K/2");}return out;};
     PureFastConfiguration ket=branch(PureBranch::Ket),bra=branch(PureBranch::Bra),full=ket;
-    // The flattened bra action order is the strict reverse of its protocol,
-    // including the noncommuting bond-factor order.
     for(int i=int(bra.slices.size())-1;i>=0;--i){full.slices.push_back(bra.slices[i]);
         full.hs_fields.push_back(bra.hs_fields[i]);full.locations.push_back(bra.locations[i]);}
     return full;
@@ -180,15 +206,28 @@ void nullable(std::ostream&o,double value,bool resolved){if(resolved&&std::isfin
 } // namespace
 
 int main(int argc,char**argv){try{
+    const auto runStarted=std::chrono::steady_clock::now();
     Parameters p=parse(argc,argv);GaussianTrialState trial=makeTrial(p);
     SpinlessTvChainUtils model(p.L,p.dt,p.V,2,p.boundary,p.delta,p.mu,p.hs);
-    std::mt19937_64 rng(p.seed);PureFastConfiguration initial=makeContour(p,model,rng);
+    std::mt19937_64 rng(p.seed);PureFastConfiguration initial;
+    PureFastInitializationPolicy initializationPolicy=
+        PureFastInitializationPolicy::MirroredTheoremZ2Plus;
+    if(p.initialization_policy=="mirrored-theorem"){
+        PureMirroredInitializationResult initialized=makeMirroredContour(p,model,rng);
+        if(!initialized.ok())throw std::runtime_error("mirrored production initializer failed: "+
+            initialized.message);
+        initial=std::move(initialized.configuration);
+    }else{
+        initial=makeSequentialAuditContour(p,model,rng);
+        initializationPolicy=PureFastInitializationPolicy::SequentialAudit;
+    }
     std::vector<int> indices=proposalIndices(initial);if(indices.empty())throw std::runtime_error("contour has no HS proposals");
     PureFastOptions options;options.weight_mode=PureProjectorWeightMode::RealZ2;
     options.read_only_audit_interval=p.audit_interval;
     PureFastRunMode runMode=p.walker_mode=="audit-lockstep"?PureFastRunMode::AuditLockstep:
         PureFastRunMode::FastStrict;
-    PureProjectorFastWalker walker(trial,std::move(initial),p.block,runMode,options);
+    PureProjectorFastWalker walker(trial,std::move(initial),p.block,runMode,options,
+        initializationPolicy);
     RetainedCsv retained(p.retained);std::uniform_real_distribution<double>uniform(0,1);
     long long accepted=0,attempted=0;std::size_t cursor=0;int direction=1;
     auto step=[&](){indices=proposalIndices(walker.configuration());int index=indices[cursor];
@@ -234,12 +273,22 @@ int main(int argc,char**argv){try{
         <<",\"burn\":"<<p.burn<<",\"measurements\":"<<p.measurements<<",\"seed\":"<<p.seed
         <<",\"stabilization_block\":"<<p.block<<",\"audit_interval\":"<<p.audit_interval
         <<",\"walker_mode\":\""<<p.walker_mode<<"\""
+        <<",\"initialization_policy\":\""<<walker.initializationPolicy()<<"\""
         <<",\"proposal_schedule\":\"forward_backward\""
         <<",\"minimum_overlap_rcond\":"<<d.minimum_overlap_rcond
         <<",\"green_fast_rebuild_relative_error_max\":"<<d.maximum_green_rebuild_error
         <<",\"ratio_reference_relative_error_max\":"<<d.maximum_ratio_reference_error
         <<",\"rebuild_count\":"<<d.rebuild_count<<",\"ratio_slow_reference_count\":"<<d.ratio_slow_reference_count
         <<",\"trust_alarm_count\":"<<d.trust_alarm_count<<",\"slow_reference_failure_count\":"<<d.slow_reference_failure_count
+        <<",\"mp_same_proposal_fallback_count\":"<<d.mp_fallback_count
+        <<",\"mp_same_proposal_fallback_failure_count\":"<<d.mp_fallback_failure_count
+        <<",\"mp_green_double_recovery_count\":"<<d.mp_green_double_recovery_count
+        <<",\"read_only_endpoint_audit_failure_count\":"<<d.read_only_endpoint_audit_failure_count
+        <<",\"fast_path_seconds\":"<<d.total_fast_seconds
+        <<",\"reference_seconds\":"<<d.total_reference_seconds
+        <<",\"runtime_seconds\":"<<std::chrono::duration<double>(
+            std::chrono::steady_clock::now()-runStarted).count()
+        <<",\"endpoint_rebuild_green_residual_max\":"<<d.maximum_endpoint_rebuild_green_residual
         <<",\"first_failure_proposal\":"<<d.first_failure_proposal<<",\"final_hs_hash\":"<<walker.configurationHash()
         <<",\"final_rng_hash\":"<<hashRng(rng)<<",\"source_commit\":\""<<jsonEscape(p.source_commit)
         <<"\",\"executable_sha256\":\""<<jsonEscape(p.executable_sha256)<<"\"}\n";

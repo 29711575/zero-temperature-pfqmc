@@ -30,10 +30,11 @@ public:
     PureProjectorStackManager(const GaussianTrialState &trial,
                               std::vector<PureProjectorSlice> slices,
                               int blockSize,
-                              PureProjectorOptions options = PureProjectorOptions())
+                              PureProjectorOptions options = PureProjectorOptions(),
+                              int initialCut = 0)
         : trial_(trial), slices_(std::move(slices)), block_size_(blockSize),
           options_(options) {
-        if (block_size_ <= 0) {
+        if (block_size_ <= 0 || initialCut < 0 || initialCut > int(slices_.size())) {
             status_ = PureStackStatus::invalid_configuration;
             return;
         }
@@ -46,7 +47,8 @@ public:
             }
         }
         buildCheckpoints();
-        rebuildAtCut(0);
+        if (status_ != PureStackStatus::success) return;
+        rebuildAtCut(initialCut);
     }
 
     bool ok() const { return status_ == PureStackStatus::success; }
