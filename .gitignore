@@ -63,3 +63,8 @@ data/
 __pycache__/
 *.py[cod]
 .virtual_documents/
+
+# Pure-projector Phase 3B generated build and run directories
+reproduction/pure_projector_kitaev/build_phase3b/
+reproduction/pure_projector_kitaev/phase3b_regression/
+reproduction/pure_projector_kitaev/phase3b_benchmark/
