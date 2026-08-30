@@ -4,6 +4,10 @@
 
 - Branch: `pure-state-projector-production-semantics-review`
 - Base Phase 3C commit: `c901cb50d88c244cc5c6973e0936627899a849d3`
+- Semantics implementation commit:
+  `62a00f892878d9c8143dce6be2efbf9dffeacfbc`
+- Small-system HPC validation-script commit:
+  `d5bd8ec5bd9e6a1615ec368e49e946cbb6ae913e`
 - Phase 4 was not started.
 - The Phase 3C MP same-proposal fallback algorithm, all numeric trust thresholds,
   condition-aware ratio, left recovery, and mutating raw/MP checkpoints were not
@@ -110,9 +114,28 @@ Local checks completed so far:
   `11030203536659588101` identical.
 - L=6 OBC+hs1 short control: average Z2 1, bin error 0, no trust alarm/fallback.
 - L=4/L=6 standalone dense ED: PASS with actual dense-Fock parity -1.
+- Frozen Task 4: ratio `0.70741914065425615`, accept, 320-digit
+  convergence, final trajectory hash `949208207496548183`.
+- Frozen Task 8: ratio `0.0026573889530685144`, reject, 320-digit
+  convergence, final trajectory hash `14005514076608941581`.
+- Frozen Task 4/8 MP fallback failures: 0; each continued for 64 proposals.
+- Phase 3B driver core: fast/audit HS hashes identical for L=2 and L=4;
+  block sizes 1/2/4/8 produced the same trajectory and `S_pi`; normal,
+  zero-sign, unwritable-path, and `/dev/full` I/O cases all PASS.
+- PBC structural guards: odd-L PBC rejection PASS, even-L `B B^-1`
+  residual 0, L=4 PBC four-bond energy error `2.3417e-15`, and OBC
+  three-bond energy error `8.3969e-16`.
+- Corrected Phase 2 dense/exact/ED validation: 8/8 PASS using 4 local CPU
+  threads.  Maximum dense weight error `7.4997e-15`, dense Green error
+  `1.6405e-14`, and determinant-identity error `1.4048e-15`.
+  L=4 ED maximum observable difference was `5.0379e-16`; L=6 was
+  `1.7764e-15`.  The largest slow-MC deviations from exact enumeration were
+  `0` for average sign, `0.00122493` for `S_pi`, and `0.0134519` for `R_CDW`,
+  within the existing statistical envelope.
 
-The corrected full Phase 2 dense enumeration/exact/ED validation and frozen
-Task 4/8 MP replay results are recorded in the final handoff after completion.
+HPC validation job 153930 was submitted while the local run proceeded, but it
+remained queued with CPU time zero.  After the local 8/8 PASS it was cancelled
+as redundant; no other HPC job was changed.
 
 ## Build
 
@@ -123,3 +146,5 @@ section after the verified build.
 
 Verified local `-O2` production driver SHA256:
 `d9fd7a40807c68eb20b168781305f459df9741af2d6df5198b5b92c68a344d63`.
+The corrected Phase 2 validation executable SHA256 was
+`2e4163eacbdb4c9be54aa112001e74ccee8e3c0961845ad2e4af1c54a9bb3ad1`.
