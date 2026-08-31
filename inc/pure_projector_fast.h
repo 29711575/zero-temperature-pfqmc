@@ -191,6 +191,8 @@ struct PureFastDiagnostics {
     double maximum_endpoint_rebuild_green_residual = 0.0;
     double total_fast_seconds = 0.0;
     double total_reference_seconds = 0.0;
+    double total_mp_fallback_seconds = 0.0;
+    PureMpPerformanceProfile mp_profile;
     int first_failure_proposal = -1;
 };
 
@@ -481,6 +483,30 @@ public:
     const PureProjectorWeightResult &currentWeight() const{return current_;}
     const PureFastDiagnostics &diagnostics() const{return diagnostics_;}
 
+#ifdef PFQMC_PURE_PROJECTOR_TEST_HOOKS
+    // Test-only checkpoint restoration. Production builds never expose this
+    // hook; the restored state must already have passed an endpoint rebuild.
+    void restoreTrustedCheckpointForTest(int z2,double logAbsWeight,DataType phase) {
+        if(z2!=1&&z2!=-1)throw std::invalid_argument("invalid checkpoint Z2");
+        const int center=int(configuration_.slices.size()/2);
+        manager_.reset(new PureProjectorStackManager(
+            trial_,configuration_.slices,block_size_,stack_options_,center));
+        if(!manager_->ok())throw std::runtime_error("checkpoint endpoint rebuild failed");
+        const PureProjectorGreenResult rebuilt=manager_->green();
+        if(!rebuilt.ok())throw std::runtime_error("checkpoint Green rebuild failed");
+        z2_sign_=z2;current_.status=PureProjectorWeightStatus::success;
+        current_.log_abs_weight=logAbsWeight;current_.complex_phase=phase;
+        current_.z2_sign=z2;current_.green=rebuilt.green;
+        current_.overlap_rank=rebuilt.overlap_rank;
+        current_.overlap_rcond=rebuilt.overlap_rcond;
+        current_.overlap_residual=rebuilt.solve_residual;
+        current_.green_residual=rebuilt.green_residual;
+        current_.weight=logAbsWeight<700.0?
+            std::exp(logAbsWeight)*phase:phase;
+        accepted_since_rebuild_=0;terminated_=false;
+    }
+#endif
+
     PureFastProposalResult propose(const PureFastProposal &proposal) {
         PureFastProposalResult output;
         if(terminated_){output.terminated=true;output.ratio.status=PureFastRatioStatus::terminated;return output;}
@@ -574,9 +600,13 @@ public:
                 mpOptions.residual_tolerance=options_.residual_tolerance;
                 mpOptions.reality_tolerance=options_.reality_tolerance;
                 mpOptions.zero_tolerance=options_.zero_tolerance;
+                const auto mpStarted=std::chrono::steady_clock::now();
                 output.ratio.mp_reference=pureProjectorMpSameProposal(
                     trial_,configuration_.slices,proposal.index,
                     proposal.new_factor,proposal.new_eta,mpOptions);
+                diagnostics_.total_mp_fallback_seconds+=std::chrono::duration<double>(
+                    std::chrono::steady_clock::now()-mpStarted).count();
+                diagnostics_.mp_profile+=output.ratio.mp_reference.profile;
                 if(!output.ratio.mp_reference.ok()||
                    !std::isfinite(output.ratio.mp_reference.ratio.real())||
                    !std::isfinite(output.ratio.mp_reference.ratio.imag())){

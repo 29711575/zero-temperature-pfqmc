@@ -312,6 +312,27 @@ int main(int argc,char**argv){try{
         <<",\"read_only_endpoint_audit_failure_count\":"<<d.read_only_endpoint_audit_failure_count
         <<",\"fast_path_seconds\":"<<d.total_fast_seconds
         <<",\"reference_seconds\":"<<d.total_reference_seconds
+        <<",\"mp_fallback_seconds\":"<<d.total_mp_fallback_seconds
+        <<",\"mp_fallback_average_seconds\":"<<(d.mp_fallback_count?
+            d.total_mp_fallback_seconds/d.mp_fallback_count:0.0)
+        <<",\"mp_canonical_input_builds\":"<<d.mp_profile.canonical_input_builds
+        <<",\"mp_cache_invalidations\":"<<d.mp_profile.cache_invalidations
+        <<",\"mp_operator_requests\":"<<d.mp_profile.operator_requests
+        <<",\"mp_operator_cache_hits\":"<<d.mp_profile.operator_cache_hits
+        <<",\"mp_operator_cache_misses\":"<<d.mp_profile.operator_cache_misses
+        <<",\"mp_operator_cache_hit_rate\":"<<(d.mp_profile.operator_requests?
+            double(d.mp_profile.operator_cache_hits)/d.mp_profile.operator_requests:0.0)
+        <<",\"mp_sparse_apply_count\":"<<d.mp_profile.sparse_apply_count
+        <<",\"mp_dense_apply_count\":"<<d.mp_profile.dense_apply_count
+        <<",\"mp_canonicalization_seconds\":"<<d.mp_profile.canonicalization_seconds
+        <<",\"mp_precision_160_seconds\":"<<d.mp_profile.precision_160_seconds
+        <<",\"mp_precision_320_seconds\":"<<d.mp_profile.precision_320_seconds
+        <<",\"mp_precision_640_seconds\":"<<d.mp_profile.precision_640_seconds
+        <<",\"mp_conversion_seconds\":"<<d.mp_profile.conversion_seconds
+        <<",\"mp_propagation_seconds\":"<<d.mp_profile.propagation_seconds
+        <<",\"mp_thin_qr_seconds\":"<<d.mp_profile.thin_qr_seconds
+        <<",\"mp_endpoint_seconds\":"<<d.mp_profile.endpoint_seconds
+        <<",\"mp_local_pfaffian_seconds\":"<<d.mp_profile.local_pfaffian_seconds
         <<",\"runtime_seconds\":"<<std::chrono::duration<double>(
             std::chrono::steady_clock::now()-runStarted).count()
         <<",\"endpoint_rebuild_green_residual_max\":"<<d.maximum_endpoint_rebuild_green_residual
