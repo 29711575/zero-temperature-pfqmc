@@ -324,6 +324,16 @@ int main(int argc,char**argv){try{
             double(d.mp_profile.operator_cache_hits)/d.mp_profile.operator_requests:0.0)
         <<",\"mp_sparse_apply_count\":"<<d.mp_profile.sparse_apply_count
         <<",\"mp_dense_apply_count\":"<<d.mp_profile.dense_apply_count
+        <<",\"mp_subspace_checkpoint_build_count\":"<<d.mp_profile.subspace_checkpoint_build_count
+        <<",\"mp_subspace_restore_count\":"<<d.mp_profile.subspace_restore_count
+        <<",\"mp_subspace_restore_miss_count\":"<<d.mp_profile.subspace_restore_miss_count
+        <<",\"mp_subspace_saved_factor_count\":"<<d.mp_profile.subspace_saved_factor_count
+        <<",\"mp_subspace_cache_invalidations\":"<<d.mp_profile.subspace_cache_invalidations
+        <<",\"mp_subspace_stale_rejection_count\":"<<d.mp_profile.subspace_stale_rejection_count
+        <<",\"mp_subspace_validation_failure_count\":"<<d.mp_profile.subspace_validation_failure_count
+        <<",\"mp_subspace_legacy_fallback_count\":"<<d.mp_profile.subspace_legacy_fallback_count
+        <<",\"mp_subspace_checkpoint_entries_peak\":"<<d.mp_profile.subspace_checkpoint_entries_peak
+        <<",\"mp_subspace_checkpoint_bytes_peak\":"<<d.mp_profile.subspace_checkpoint_bytes_peak
         <<",\"mp_canonicalization_seconds\":"<<d.mp_profile.canonicalization_seconds
         <<",\"mp_precision_160_seconds\":"<<d.mp_profile.precision_160_seconds
         <<",\"mp_precision_320_seconds\":"<<d.mp_profile.precision_320_seconds
@@ -331,6 +341,7 @@ int main(int argc,char**argv){try{
         <<",\"mp_conversion_seconds\":"<<d.mp_profile.conversion_seconds
         <<",\"mp_propagation_seconds\":"<<d.mp_profile.propagation_seconds
         <<",\"mp_thin_qr_seconds\":"<<d.mp_profile.thin_qr_seconds
+        <<",\"mp_subspace_validation_seconds\":"<<d.mp_profile.subspace_validation_seconds
         <<",\"mp_endpoint_seconds\":"<<d.mp_profile.endpoint_seconds
         <<",\"mp_local_pfaffian_seconds\":"<<d.mp_profile.local_pfaffian_seconds
         <<",\"runtime_seconds\":"<<std::chrono::duration<double>(

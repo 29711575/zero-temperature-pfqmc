@@ -54,6 +54,16 @@ struct PureMpPerformanceProfile {
     std::uint64_t operator_cache_misses = 0;
     std::uint64_t sparse_apply_count = 0;
     std::uint64_t dense_apply_count = 0;
+    std::uint64_t subspace_checkpoint_build_count = 0;
+    std::uint64_t subspace_restore_count = 0;
+    std::uint64_t subspace_restore_miss_count = 0;
+    std::uint64_t subspace_saved_factor_count = 0;
+    std::uint64_t subspace_cache_invalidations = 0;
+    std::uint64_t subspace_stale_rejection_count = 0;
+    std::uint64_t subspace_validation_failure_count = 0;
+    std::uint64_t subspace_legacy_fallback_count = 0;
+    std::uint64_t subspace_checkpoint_entries_peak = 0;
+    std::uint64_t subspace_checkpoint_bytes_peak = 0;
     double canonicalization_seconds = 0.0;
     double precision_160_seconds = 0.0;
     double precision_320_seconds = 0.0;
@@ -61,6 +71,7 @@ struct PureMpPerformanceProfile {
     double conversion_seconds = 0.0;
     double propagation_seconds = 0.0;
     double thin_qr_seconds = 0.0;
+    double subspace_validation_seconds = 0.0;
     double endpoint_seconds = 0.0;
     double local_pfaffian_seconds = 0.0;
 
@@ -72,6 +83,18 @@ struct PureMpPerformanceProfile {
         operator_cache_misses+=other.operator_cache_misses;
         sparse_apply_count+=other.sparse_apply_count;
         dense_apply_count+=other.dense_apply_count;
+        subspace_checkpoint_build_count+=other.subspace_checkpoint_build_count;
+        subspace_restore_count+=other.subspace_restore_count;
+        subspace_restore_miss_count+=other.subspace_restore_miss_count;
+        subspace_saved_factor_count+=other.subspace_saved_factor_count;
+        subspace_cache_invalidations+=other.subspace_cache_invalidations;
+        subspace_stale_rejection_count+=other.subspace_stale_rejection_count;
+        subspace_validation_failure_count+=other.subspace_validation_failure_count;
+        subspace_legacy_fallback_count+=other.subspace_legacy_fallback_count;
+        subspace_checkpoint_entries_peak=std::max(subspace_checkpoint_entries_peak,
+            other.subspace_checkpoint_entries_peak);
+        subspace_checkpoint_bytes_peak=std::max(subspace_checkpoint_bytes_peak,
+            other.subspace_checkpoint_bytes_peak);
         canonicalization_seconds+=other.canonicalization_seconds;
         precision_160_seconds+=other.precision_160_seconds;
         precision_320_seconds+=other.precision_320_seconds;
@@ -79,6 +102,7 @@ struct PureMpPerformanceProfile {
         conversion_seconds+=other.conversion_seconds;
         propagation_seconds+=other.propagation_seconds;
         thin_qr_seconds+=other.thin_qr_seconds;
+        subspace_validation_seconds+=other.subspace_validation_seconds;
         endpoint_seconds+=other.endpoint_seconds;
         local_pfaffian_seconds+=other.local_pfaffian_seconds;
         return *this;
@@ -114,6 +138,7 @@ struct PureMpProposalOptions {
     double agreement_tolerance = 1e-12;
     bool real_z2 = true;
     bool enable_operator_cache = true;
+    bool enable_subspace_cache = true;
 };
 
 namespace pure_projector_mp_detail {
@@ -135,9 +160,17 @@ struct CanonicalInput {
     int candidate_operator_id=-1;
 };
 
+inline void canonicalHashMix(std::uint64_t&hash,std::uint64_t value) {
+    value+=0x9e3779b97f4a7c15ULL+(hash<<6)+(hash>>2);
+    value^=value>>30;value*=0xbf58476d1ce4e5b9ULL;
+    value^=value>>27;value*=0x94d049bb133111ebULL;value^=value>>31;
+    hash^=value;hash=(hash<<27)|(hash>>(64-27));
+    hash=hash*5+0x52dce729ULL;
+}
+
 inline std::uint64_t canonicalMatrixHash(const MatType &matrix) {
     std::uint64_t hash=1469598103934665603ULL;
-    auto mix=[&](std::uint64_t value){hash^=value;hash*=1099511628211ULL;};
+    auto mix=[&](std::uint64_t value){canonicalHashMix(hash,value);};
     mix(std::uint64_t(matrix.rows()));mix(std::uint64_t(matrix.cols()));
     for(int c=0;c<matrix.cols();++c)for(int r=0;r<matrix.rows();++r){
         double re=matrix(r,c).real(),im=matrix(r,c).imag();
@@ -179,6 +212,27 @@ inline CanonicalInput canonicalizeInput(
     result.slice_operator_ids.reserve(slices.size());
     for(const auto &slice:slices)result.slice_operator_ids.push_back(intern(slice.matrix));
     result.candidate_operator_id=intern(candidate);return result;
+}
+
+inline std::uint64_t contourOrderHash(const std::vector<PureProjectorSlice>&slices) {
+    std::uint64_t hash=1469598103934665603ULL;
+    auto mix=[&](std::uint64_t value){canonicalHashMix(hash,value);};
+    mix(std::uint64_t(slices.size()));
+    for(std::size_t index=0;index<slices.size();++index){
+        mix(std::uint64_t(index));mix(canonicalMatrixHash(slices[index].matrix));
+        mix(std::uint64_t(slices[index].matrix.rows()));
+        mix(std::uint64_t(slices[index].matrix.cols()));}
+    return hash;
+}
+
+inline std::uint64_t configurationHash(const std::vector<PureProjectorSlice>&slices) {
+    std::uint64_t hash=contourOrderHash(slices);
+    auto mix=[&](std::uint64_t value){canonicalHashMix(hash,value);};
+    for(const auto&slice:slices){double re=slice.eta.real(),im=slice.eta.imag();
+        if(re==0.0)re=0.0;if(im==0.0)im=0.0;std::uint64_t a=0,b=0;
+        std::memcpy(&a,&re,sizeof(double));std::memcpy(&b,&im,sizeof(double));
+        mix(a);mix(b);}
+    return hash;
 }
 
 template<unsigned Digits> struct Number {
@@ -322,6 +376,66 @@ template<unsigned Digits> struct Number {
     }
 };
 
+template<unsigned Digits> struct PrecisionSubspaceCache {
+    using X=Number<Digits>;using M=typename X::Matrix;
+    struct Checkpoint {
+        std::uint64_t configuration_hash=0,order_hash=0,trial_hash=0;
+        int cut=0,slice_count=0;
+        M subspace;
+    };
+    std::vector<Checkpoint> right,left;
+    std::uint64_t configuration_hash=0,order_hash=0,trial_hash=0;
+    int slice_count=0;
+    bool initialized=false;
+
+    void clear(){right.clear();left.clear();initialized=false;configuration_hash=0;
+        order_hash=0;trial_hash=0;slice_count=0;}
+    std::size_t entries()const{return right.size()+left.size();}
+    std::uint64_t estimatedBytes()const{
+        const std::uint64_t bytesPerReal=(std::uint64_t(Digits)*3322+7999)/8000;
+        std::uint64_t total=0;auto count=[&](const std::vector<Checkpoint>&v){
+            for(const auto&checkpoint:v)total+=std::uint64_t(checkpoint.subspace.values.size())*
+                2*bytesPerReal;};count(right);count(left);return total;}
+
+    bool matches(std::uint64_t configuration,std::uint64_t order,
+                 std::uint64_t trial,int slices)const{
+        return initialized&&configuration_hash==configuration&&order_hash==order&&
+            trial_hash==trial&&slice_count==slices;}
+    void initialize(std::uint64_t configuration,std::uint64_t order,
+                    std::uint64_t trial,int slices){clear();initialized=true;
+        configuration_hash=configuration;order_hash=order;trial_hash=trial;slice_count=slices;}
+
+    const Checkpoint*bestRight(int target)const{const Checkpoint*best=nullptr;
+        for(const auto&checkpoint:right)if(checkpoint.cut<=target&&
+            (!best||checkpoint.cut>best->cut))best=&checkpoint;return best;}
+    const Checkpoint*bestLeft(int target)const{const Checkpoint*best=nullptr;
+        for(const auto&checkpoint:left)if(checkpoint.cut>=target&&
+            (!best||checkpoint.cut<best->cut))best=&checkpoint;return best;}
+
+    bool store(std::vector<Checkpoint>&side,int cut,const M&subspace){
+        for(auto&checkpoint:side)if(checkpoint.cut==cut){checkpoint.subspace=subspace;return false;}
+        Checkpoint checkpoint;checkpoint.configuration_hash=configuration_hash;
+        checkpoint.order_hash=order_hash;checkpoint.trial_hash=trial_hash;
+        checkpoint.cut=cut;checkpoint.slice_count=slice_count;checkpoint.subspace=subspace;
+        side.push_back(std::move(checkpoint));return true;}
+
+    std::uint64_t acceptedUpdate(std::uint64_t oldConfiguration,
+        std::uint64_t newConfiguration,std::uint64_t newOrder,int index){
+        if(!initialized)return 0;if(configuration_hash!=oldConfiguration){const auto count=entries();
+            clear();return count;}
+        std::uint64_t invalidated=0;
+        auto keep=[&](std::vector<Checkpoint>&side,bool isRight){
+            std::vector<Checkpoint> retained;retained.reserve(side.size());
+            for(auto&checkpoint:side){const bool unaffected=isRight?
+                    checkpoint.cut<=index:checkpoint.cut>index;
+                if(unaffected){checkpoint.configuration_hash=newConfiguration;
+                    checkpoint.order_hash=newOrder;retained.push_back(std::move(checkpoint));}
+                else ++invalidated;}side.swap(retained);};
+        keep(right,true);keep(left,false);configuration_hash=newConfiguration;
+        order_hash=newOrder;return invalidated;
+    }
+};
+
 template<unsigned Digits> PureMpProposalResult evaluateAtPrecisionLegacy(
     const GaussianTrialState &trial,const std::vector<PureProjectorSlice>&slices,
     int index,const MatType&newFactor,DataType newEta,
@@ -429,7 +543,10 @@ template<unsigned Digits> PureMpProposalResult evaluateAtPrecisionLegacy(
 template<unsigned Digits> PureMpProposalResult evaluateAtPrecisionCached(
     const GaussianTrialState &trial,const std::vector<PureProjectorSlice>&slices,
     int index,const MatType&newFactor,DataType newEta,
-    const PureMpProposalOptions&options,const CanonicalInput&canonical) {
+    const PureMpProposalOptions&options,const CanonicalInput&canonical,
+    PrecisionSubspaceCache<Digits>*subspaceCache=nullptr,
+    std::uint64_t configurationHash=0,std::uint64_t orderHash=0,
+    std::uint64_t trialHash=0) {
     using X=Number<Digits>;using C=typename X::Complex;using M=typename X::Matrix;
     struct Entry {int row=0,column=0;C value;};
     struct Operator {M dense;std::vector<Entry> delta;bool sparse=false;};
@@ -474,21 +591,60 @@ template<unsigned Digits> PureMpProposalResult evaluateAtPrecisionCached(
             const bool ok=X::orthonormalize(subspace);
             result.profile.thin_qr_seconds+=std::chrono::duration<double>(
                 std::chrono::steady_clock::now()-started).count();return ok;};
+        auto cacheProfile=[&](){if(!subspaceCache)return;
+            result.profile.subspace_checkpoint_entries_peak=std::max<std::uint64_t>(
+                result.profile.subspace_checkpoint_entries_peak,subspaceCache->entries());
+            result.profile.subspace_checkpoint_bytes_peak=std::max(
+                result.profile.subspace_checkpoint_bytes_peak,subspaceCache->estimatedBytes());};
+        auto storeCheckpoint=[&](bool rightSide,int cut,const M&subspace){if(!subspaceCache)return;
+            auto&side=rightSide?subspaceCache->right:subspaceCache->left;
+            if(subspaceCache->store(side,cut,subspace))
+                ++result.profile.subspace_checkpoint_build_count;cacheProfile();};
+        auto checkpointValid=[&](const typename PrecisionSubspaceCache<Digits>::Checkpoint&checkpoint){
+            const auto started=std::chrono::steady_clock::now();bool valid=
+                checkpoint.configuration_hash==configurationHash&&checkpoint.order_hash==orderHash&&
+                checkpoint.trial_hash==trialHash&&checkpoint.slice_count==int(slices.size())&&
+                checkpoint.subspace.rows==trial.Phi.rows()&&
+                checkpoint.subspace.cols==trial.Phi.cols();
+            if(valid){const M gram=X::multiply(X::adjoint(checkpoint.subspace),checkpoint.subspace);
+                const typename X::Real residual=X::norm(X::sub(gram,M::identity(gram.rows)))/
+                    std::max(typename X::Real(1),X::norm(gram));
+                valid=residual<=typename X::Real(options.residual_tolerance);}
+            result.profile.subspace_validation_seconds+=std::chrono::duration<double>(
+                std::chrono::steady_clock::now()-started).count();return valid;};
 
-        M right=X::fromDouble(trial.Phi);int rightSteps=0;
-        for(int i=0;i<index;++i){right=apply(operators[std::size_t(
+        int rightStart=0;M right=X::fromDouble(trial.Phi);
+        if(subspaceCache){const auto*checkpoint=subspaceCache->bestRight(index);
+            if(checkpoint&&checkpointValid(*checkpoint)){right=checkpoint->subspace;
+                rightStart=checkpoint->cut;++result.profile.subspace_restore_count;
+                result.profile.subspace_saved_factor_count+=std::uint64_t(rightStart);}
+            else{++result.profile.subspace_restore_miss_count;if(checkpoint){
+                ++result.profile.subspace_validation_failure_count;
+                subspaceCache->initialize(configurationHash,orderHash,trialHash,int(slices.size()));}}}
+        for(int i=rightStart;i<index;++i){right=apply(operators[std::size_t(
                 canonical.slice_operator_ids[std::size_t(i)])],right,false);
-            if(++rightSteps%8==0&&!orthonormalize(right)){
-                result.status=PureMpProposalStatus::endpoint_untrusted;
-                result.message="MP right thin-subspace QR failed";return result;}}
+            const int cut=i+1;if(cut%8==0){if(!orthonormalize(right)){
+                    result.status=PureMpProposalStatus::endpoint_untrusted;
+                    result.message="MP right thin-subspace QR failed";return result;}
+                storeCheckpoint(true,cut,right);}}
         if(!orthonormalize(right)){result.status=PureMpProposalStatus::endpoint_untrusted;
             result.message="MP right target subspace QR failed";return result;}
-        M left=X::fromDouble(trial.Phi);int leftSteps=0;
-        for(int i=int(slices.size())-1;i>index;--i){left=apply(operators[std::size_t(
+
+        const int leftTarget=index+1,total=int(slices.size());int leftStart=total;
+        M left=X::fromDouble(trial.Phi);
+        if(subspaceCache){const auto*checkpoint=subspaceCache->bestLeft(leftTarget);
+            if(checkpoint&&checkpointValid(*checkpoint)){left=checkpoint->subspace;
+                leftStart=checkpoint->cut;++result.profile.subspace_restore_count;
+                result.profile.subspace_saved_factor_count+=std::uint64_t(total-leftStart);}
+            else{++result.profile.subspace_restore_miss_count;if(checkpoint){
+                ++result.profile.subspace_validation_failure_count;
+                subspaceCache->initialize(configurationHash,orderHash,trialHash,total);}}}
+        for(int i=leftStart-1;i>=leftTarget;--i){left=apply(operators[std::size_t(
                 canonical.slice_operator_ids[std::size_t(i)])],left,true);
-            if(++leftSteps%8==0&&!orthonormalize(left)){
-                result.status=PureMpProposalStatus::endpoint_untrusted;
-                result.message="MP left thin-subspace QR failed";return result;}}
+            const int cut=i;if((total-cut)%8==0){if(!orthonormalize(left)){
+                    result.status=PureMpProposalStatus::endpoint_untrusted;
+                    result.message="MP left thin-subspace QR failed";return result;}
+                storeCheckpoint(false,cut,left);}}
         if(!orthonormalize(left)){result.status=PureMpProposalStatus::endpoint_untrusted;
             result.message="MP left target subspace QR failed";return result;}
 
@@ -594,53 +750,164 @@ inline bool agree(const PureMpProposalResult&a,const PureMpProposalResult&b,
 
 } // namespace pure_projector_mp_detail
 
+inline std::uint64_t pureProjectorMpConfigurationHash(
+    const std::vector<PureProjectorSlice>&slices) {
+    return pure_projector_mp_detail::configurationHash(slices);
+}
+
+class PureMpSubspaceCache {
+public:
+    PureMpPerformanceProfile prepare(const GaussianTrialState&trial,
+        const std::vector<PureProjectorSlice>&slices,std::uint64_t externalConfigurationHash=0) {
+        PureMpPerformanceProfile delta;const std::uint64_t configuration=
+            externalConfigurationHash?externalConfigurationHash:
+            pure_projector_mp_detail::configurationHash(slices);
+        const std::uint64_t order=pure_projector_mp_detail::contourOrderHash(slices);
+        const std::uint64_t trialHash=pure_projector_mp_detail::canonicalMatrixHash(trial.Phi);
+        if(initialized_&&(configuration_hash_!=configuration||order_hash_!=order||
+           trial_hash_!=trialHash||slice_count_!=int(slices.size()))){
+            ++delta.subspace_stale_rejection_count;delta.subspace_cache_invalidations+=entries();
+            clearAll();}
+        if(!initialized_){initialized_=true;configuration_hash_=configuration;order_hash_=order;
+            trial_hash_=trialHash;slice_count_=int(slices.size());
+            initializePrecisions();}
+        return delta;
+    }
+
+    PureMpPerformanceProfile acceptedUpdate(std::uint64_t oldConfigurationHash,
+        std::uint64_t newConfigurationHash,int index,
+        const std::vector<PureProjectorSlice>&slices) {
+        PureMpPerformanceProfile delta;
+        if(!initialized_)return delta;
+        const std::uint64_t newOrder=pure_projector_mp_detail::contourOrderHash(slices);
+        if(configuration_hash_!=oldConfigurationHash||slice_count_!=int(slices.size())){
+            ++delta.subspace_stale_rejection_count;delta.subspace_cache_invalidations+=entries();
+            clearAll();
+        }else{
+            delta.subspace_cache_invalidations+=cache160_.acceptedUpdate(
+                oldConfigurationHash,newConfigurationHash,newOrder,index);
+            delta.subspace_cache_invalidations+=cache320_.acceptedUpdate(
+                oldConfigurationHash,newConfigurationHash,newOrder,index);
+            delta.subspace_cache_invalidations+=cache640_.acceptedUpdate(
+                oldConfigurationHash,newConfigurationHash,newOrder,index);
+            configuration_hash_=newConfigurationHash;order_hash_=newOrder;
+        }
+        total_profile_+=delta;updatePeaks(total_profile_);return delta;
+    }
+
+    template<unsigned Digits> pure_projector_mp_detail::PrecisionSubspaceCache<Digits>*precision(){
+        if constexpr(Digits==160)return &cache160_;
+        else if constexpr(Digits==320)return &cache320_;
+        else return &cache640_;
+    }
+    template<unsigned Digits> void clearPrecision(){precision<Digits>()->initialize(
+        configuration_hash_,order_hash_,trial_hash_,slice_count_);}
+    void record(const PureMpPerformanceProfile&profile){total_profile_+=profile;updatePeaks(total_profile_);}
+    const PureMpPerformanceProfile&profile()const{return total_profile_;}
+    std::uint64_t configurationHash()const{return configuration_hash_;}
+    std::uint64_t orderHash()const{return order_hash_;}
+    std::uint64_t trialHash()const{return trial_hash_;}
+
+private:
+    std::uint64_t entries()const{return cache160_.entries()+cache320_.entries()+cache640_.entries();}
+    std::uint64_t bytes()const{return cache160_.estimatedBytes()+cache320_.estimatedBytes()+
+        cache640_.estimatedBytes();}
+    void clearAll(){cache160_.clear();cache320_.clear();cache640_.clear();initialized_=false;
+        configuration_hash_=0;order_hash_=0;trial_hash_=0;slice_count_=0;}
+    void initializePrecisions(){cache160_.initialize(configuration_hash_,order_hash_,trial_hash_,slice_count_);
+        cache320_.initialize(configuration_hash_,order_hash_,trial_hash_,slice_count_);
+        cache640_.initialize(configuration_hash_,order_hash_,trial_hash_,slice_count_);}
+    void updatePeaks(PureMpPerformanceProfile&profile)const{
+        profile.subspace_checkpoint_entries_peak=std::max(profile.subspace_checkpoint_entries_peak,entries());
+        profile.subspace_checkpoint_bytes_peak=std::max(profile.subspace_checkpoint_bytes_peak,bytes());}
+
+    bool initialized_=false;std::uint64_t configuration_hash_=0,order_hash_=0,trial_hash_=0;
+    int slice_count_=0;PureMpPerformanceProfile total_profile_;
+    pure_projector_mp_detail::PrecisionSubspaceCache<160>cache160_;
+    pure_projector_mp_detail::PrecisionSubspaceCache<320>cache320_;
+    pure_projector_mp_detail::PrecisionSubspaceCache<640>cache640_;
+};
+
 inline PureMpProposalResult pureProjectorMpSameProposal(
     const GaussianTrialState &trial,const std::vector<PureProjectorSlice>&slices,
     int index,const MatType&newFactor,DataType newEta,
-    const PureMpProposalOptions&options=PureMpProposalOptions()) {
+    const PureMpProposalOptions&options=PureMpProposalOptions(),
+    PureMpSubspaceCache*subspaceCache=nullptr,
+    std::uint64_t externalConfigurationHash=0) {
     using namespace pure_projector_mp_detail;
     // Phase 3E only optimizes the production RealZ2 oracle.  Keep the
     // GenericComplex implementation bit-for-bit on the legacy path.
     const bool useCache=options.enable_operator_cache&&options.real_z2;
+    const bool useSubspace=useCache&&options.enable_subspace_cache&&subspaceCache;
     CanonicalInput canonical;double canonicalizationSeconds=0.0;
+    PureMpPerformanceProfile prepareProfile;
+    if(useSubspace)prepareProfile=subspaceCache->prepare(
+        trial,slices,externalConfigurationHash);
     if(useCache){const auto started=std::chrono::steady_clock::now();
         canonical=canonicalizeInput(slices,newFactor);
         canonicalizationSeconds=std::chrono::duration<double>(
             std::chrono::steady_clock::now()-started).count();}
     auto run160=[&](){const auto started=std::chrono::steady_clock::now();
         PureMpProposalResult value=useCache?
-            evaluateAtPrecisionCached<160>(trial,slices,index,newFactor,newEta,options,canonical):
+            evaluateAtPrecisionCached<160>(trial,slices,index,newFactor,newEta,options,canonical,
+                useSubspace?subspaceCache->precision<160>():nullptr,
+                useSubspace?subspaceCache->configurationHash():0,
+                useSubspace?subspaceCache->orderHash():0,
+                useSubspace?subspaceCache->trialHash():0):
             evaluateAtPrecisionLegacy<160>(trial,slices,index,newFactor,newEta,options);
+        if(useSubspace&&!resolved(value)){const PureMpPerformanceProfile failed=value.profile;
+            subspaceCache->clearPrecision<160>();value=evaluateAtPrecisionCached<160>(
+                trial,slices,index,newFactor,newEta,options,canonical);
+            value.profile+=failed;++value.profile.subspace_legacy_fallback_count;}
         value.profile.precision_160_seconds=std::chrono::duration<double>(
             std::chrono::steady_clock::now()-started).count();return value;};
     auto run320=[&](){const auto started=std::chrono::steady_clock::now();
         PureMpProposalResult value=useCache?
-            evaluateAtPrecisionCached<320>(trial,slices,index,newFactor,newEta,options,canonical):
+            evaluateAtPrecisionCached<320>(trial,slices,index,newFactor,newEta,options,canonical,
+                useSubspace?subspaceCache->precision<320>():nullptr,
+                useSubspace?subspaceCache->configurationHash():0,
+                useSubspace?subspaceCache->orderHash():0,
+                useSubspace?subspaceCache->trialHash():0):
             evaluateAtPrecisionLegacy<320>(trial,slices,index,newFactor,newEta,options);
+        if(useSubspace&&!resolved(value)){const PureMpPerformanceProfile failed=value.profile;
+            subspaceCache->clearPrecision<320>();value=evaluateAtPrecisionCached<320>(
+                trial,slices,index,newFactor,newEta,options,canonical);
+            value.profile+=failed;++value.profile.subspace_legacy_fallback_count;}
         value.profile.precision_320_seconds=std::chrono::duration<double>(
             std::chrono::steady_clock::now()-started).count();return value;};
     PureMpProposalResult r160=run160(),r320=run320();
     PureMpPerformanceProfile combined=r160.profile;combined+=r320.profile;
+    combined+=prepareProfile;
     if(useCache){combined.canonical_input_builds=1;
         combined.cache_invalidations=1;}
     combined.canonicalization_seconds=canonicalizationSeconds;
-    if(agree(r160,r320,options)){PureMpProposalResult result=r320;result.profile=combined;
+    auto finalize=[&](PureMpProposalResult result){result.profile=combined;
+        if(useSubspace)subspaceCache->record(result.profile);return result;};
+    if(agree(r160,r320,options)){PureMpProposalResult result=r320;
         result.status=PureMpProposalStatus::trusted;result.converged=true;
-        result.message="MP160/MP320 consecutive-precision agreement";return result;}
+        result.message="MP160/MP320 consecutive-precision agreement";return finalize(result);}
     const auto started640=std::chrono::steady_clock::now();
     PureMpProposalResult r640=useCache?
-        evaluateAtPrecisionCached<640>(trial,slices,index,newFactor,newEta,options,canonical):
+        evaluateAtPrecisionCached<640>(trial,slices,index,newFactor,newEta,options,canonical,
+            useSubspace?subspaceCache->precision<640>():nullptr,
+            useSubspace?subspaceCache->configurationHash():0,
+            useSubspace?subspaceCache->orderHash():0,
+            useSubspace?subspaceCache->trialHash():0):
         evaluateAtPrecisionLegacy<640>(trial,slices,index,newFactor,newEta,options);
+    if(useSubspace&&!resolved(r640)){const PureMpPerformanceProfile failed=r640.profile;
+        subspaceCache->clearPrecision<640>();r640=evaluateAtPrecisionCached<640>(
+            trial,slices,index,newFactor,newEta,options,canonical);
+        r640.profile+=failed;++r640.profile.subspace_legacy_fallback_count;}
     r640.profile.precision_640_seconds=std::chrono::duration<double>(
         std::chrono::steady_clock::now()-started640).count();combined+=r640.profile;
     combined.canonicalization_seconds=canonicalizationSeconds;
-    if(agree(r320,r640,options)){PureMpProposalResult result=r640;result.profile=combined;
+    if(agree(r320,r640,options)){PureMpProposalResult result=r640;
         result.status=PureMpProposalStatus::trusted;result.converged=true;
-        result.message="MP320/MP640 consecutive-precision agreement";return result;}
-    PureMpProposalResult result=r640;result.profile=combined;
+        result.message="MP320/MP640 consecutive-precision agreement";return finalize(result);}
+    PureMpProposalResult result=r640;
     result.status=PureMpProposalStatus::precision_disagreement;
     result.converged=false;result.message="MP same-proposal oracle failed consecutive-precision agreement";
-    return result;
+    return finalize(result);
 }
 
 #endif

@@ -603,7 +603,8 @@ public:
                 const auto mpStarted=std::chrono::steady_clock::now();
                 output.ratio.mp_reference=pureProjectorMpSameProposal(
                     trial_,configuration_.slices,proposal.index,
-                    proposal.new_factor,proposal.new_eta,mpOptions);
+                    proposal.new_factor,proposal.new_eta,mpOptions,
+                    &mp_subspace_cache_,output.snapshot.configuration_hash);
                 diagnostics_.total_mp_fallback_seconds+=std::chrono::duration<double>(
                     std::chrono::steady_clock::now()-mpStarted).count();
                 diagnostics_.mp_profile+=output.ratio.mp_reference.profile;
@@ -692,6 +693,9 @@ public:
                 if(!manager_->acceptFactorAtCut(proposal.index,replacement,rightBeforeForUpdate)){
                     terminated_=true;output.terminated=true;return output;}}
             configuration_=std::move(candidate);
+            diagnostics_.mp_profile+=mp_subspace_cache_.acceptedUpdate(
+                output.snapshot.configuration_hash,configurationHash(),
+                proposal.index,configuration_.slices);
             if(referenceControlsDecision&&!mpControlsDecision)current_=candidateWeight;
             else{
                 current_.log_abs_weight+=std::log(std::abs(output.ratio.ratio));
@@ -798,6 +802,7 @@ private:
     PureFastInitializationPolicy initialization_policy_=
         PureFastInitializationPolicy::SequentialAudit;
     std::uint64_t accepted_since_rebuild_=0;
+    PureMpSubspaceCache mp_subspace_cache_;
 };
 
 #endif
