@@ -1,0 +1,8 @@
+protocol,driver_protocol,tau_f,Delta_tau,V_i,V_f,R,burn,measurements,seeds
+sudden_quench,quench,0.1,0.1,0,2,0,25,100,4
+sudden_quench,quench,0.2,0.1,0,2,0,25,100,4
+sudden_quench,quench,0.4,0.1,0,2,0,25,100,4
+linear_ramp,ramp,0.1,0.1,0,1,10,25,100,4
+linear_ramp,ramp,0.2,0.1,0,2,10,25,100,4
+linear_ramp,ramp,0.4,0.1,0,4,10,25,100,4
+linear_ramp,ramp,0.4,0.05,0,4,10,25,100,4

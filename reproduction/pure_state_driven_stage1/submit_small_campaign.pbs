@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#PBS -N pure_driven_s1
+#PBS -q workq
+#PBS -l nodes=cn3:ppn=6
+#PBS -l walltime=02:00:00
+#PBS -j oe
+
+source /opt/ohpc/pub/apps/intel/oneapi/setvars.sh >/dev/null 2>&1
+set -euo pipefail
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+
+work=/home/sunxr/driven_stage1_compile.xj975p
+cd "$work"
+python3 run_small_campaign.py \
+  --executable "$work/driven_qmc" \
+  --campaign "$work/small_campaign.csv" \
+  --output-dir "$work/qmc_campaign" \
+  --jobs 6
